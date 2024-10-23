@@ -1,85 +1,48 @@
-use rodio::source::{SineWave, Source};
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
-use std::fs::File;
-use std::io::BufReader;
-use std::time::Duration;
-use std::thread;
+mod sound_manager;
 
-pub struct Sound {
-    stream: OutputStream,
-    stream_handle: OutputStreamHandle,
-    sink: Sink,
-    source: String,
-    volume: f32,
-    loaded: bool,
-}
-
-impl Sound {
-    pub fn new(source: &String, volume: f32) -> Sound {
-        let (stream, stream_handle) = match OutputStream::try_default() {
-            Ok((stream, handle)) => (stream, handle),
-            Err(_) => panic!("Failed to create stream"),
-        };
-        let sink = match Sink::try_new(&stream_handle) {
-            Ok(sink) => sink,
-            Err(_) => panic!("Failed to create sink"),
-        };
-        Sound {
-            stream,
-            stream_handle,
-            sink,
-            source: source.clone(),
-            volume,
-            loaded: false,
-        }
-    }
-
-    pub fn load(&mut self) {
-        if self.loaded {
-            return;
-        }
-        let file: BufReader<File> = BufReader::new(File::open(&self.source).unwrap());
-        let buffer = Decoder::new(file).unwrap();
-        self.sink.append(buffer);
-        println!("Playing sound: {} with volume {}", self.source, self.volume);
-        self.loaded = true;
-    }
-
-    pub fn play(&mut self) {
-        self.load();
-        self.set_volume(self.volume);
-        self.sink.play();
-    }
-
-    pub fn stop(&self) {
-        self.sink.stop();
-    }
-
-    pub fn set_volume(&self, volume: f32) {
-        self.sink.set_volume(volume);
-    }
-}
+use crate::sound_manager::Sound;
 
 
 fn main() {
 
     let mut sounds: Vec<Sound> = vec![];
     let params: Vec<(String, f32)> = vec![
-        ("./sounds/nature/waves.mp3".to_string(), 1.),
-        ("./sounds/things/wind-chimes.mp3".to_string(), 1.),
+        ("./sounds/nature/waves.mp3".to_string(), 0.5),
+        ("./sounds/things/wind-chimes.mp3".to_string(), 0.5),
         ("./sounds/binaural/binaural-alpha.wav".to_string(), 0.01),
     ];
 
     // Create Sound instances with separate sinks for each sound
     for (source, volume) in params.iter() {
         sounds.push(Sound::new(&source, *volume));
-        sounds.last_mut().unwrap().load();
     }
 
-    // Play all sounds in the main thread
-    for sound in sounds.iter_mut() {
-        sound.play();
-    }
+        // Code à exécuter dans le nouveau thread
+        sounds[0].play();
+        //std::thread::sleep(std::time::Duration::from_secs(1));
+        sounds[1].play();
+        //std::thread::sleep(std::time::Duration::from_secs(1));
+        sounds[2].play();
 
-    std::thread::sleep(std::time::Duration::from_secs(5));
+        let mut i = 0;
+        loop{
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            println!("{}",i);
+            for j in 0..sounds.len() {
+                sounds[j].update();
+                //println!("Sound {} playing ? {}",j,sounds[j].is_playing());
+            }
+            if i==19 {
+                sounds[0].set_source(&"./sounds/nature/campfire.mp3".to_string());
+                sounds[0].play();
+            }
+            i+=1;
+            if i == 100 {return;}
+        }
 }
+
+//Todo
+// - Add a way to stop the sounds
+// - Add a way to change the volume of the sounds
+// - Load a new sound
+// - delete a sink to create a new one
