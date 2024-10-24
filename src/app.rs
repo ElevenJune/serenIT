@@ -1,8 +1,4 @@
-use ratatui::{
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
-    widgets::ListState,
-    DefaultTerminal,
-};
+use ratatui::prelude::*;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -14,20 +10,25 @@ use ratatui::{
     symbols::{self},
     text::Line,
     widgets::{
-        Block, Borders, HighlightSpacing, List, ListItem, Padding, Paragraph,
-        StatefulWidget, Widget, Wrap,
-    }
+        Block, Borders, HighlightSpacing, List, ListItem, Padding, Paragraph, StatefulWidget,
+        Widget, Wrap, LineGauge
+    },
 };
+use ratatui::{
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    widgets::ListState,
+    DefaultTerminal,
+};
+use std::io::{stdout, Stdout, Write};
+use std::sync::Arc;
 
+use crate::sound_manager::SoundManager;
 use color_eyre::Result;
-use crate::sound::Sound;
-
-
 
 pub struct App {
     exit: bool,
     state: ListState,
-    sound_manager:Sound
+    sound_manager: SoundManager,
 }
 
 impl App {
@@ -41,20 +42,20 @@ impl App {
         Ok(())
     }
 
-    pub fn new(sound:Sound) -> Self {
+    pub fn new(sound_manager: SoundManager) -> Self {
         App {
             exit: false,
             state: ListState::default(),
-            sound_manager:sound
+            sound_manager,
         }
     }
 
     //----Getters
-    pub fn get_state(&mut self) -> &mut ListState{
+    pub fn get_state(&mut self) -> &mut ListState {
         &mut self.state
     }
 
-    pub fn get_selected(&self) -> Option<usize>{
+    pub fn get_selected(&self) -> Option<usize> {
         self.state.selected()
     }
 
@@ -65,14 +66,14 @@ impl App {
             return;
         }
         match key.code {
-            KeyCode::Char('h') | KeyCode::Left => self.select_none(),
+            KeyCode::Char('h') | KeyCode::Left => self.change_sound_volume(-0.02),
+            KeyCode::Char('i') | KeyCode::Right => self.change_sound_volume(0.02),
             KeyCode::Char('j') | KeyCode::Down => self.select_next(),
             KeyCode::Char('k') | KeyCode::Up => self.select_previous(),
-            KeyCode::Char('g') | KeyCode::Home => self.sound_manager.update(),
+            KeyCode::Char('g') | KeyCode::Home => {}
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
-            KeyCode::Char('q') => self.exit=true,
-            KeyCode::Char('a') => self.sound_manager.stop(),
-            KeyCode::Char('z') => self.sound_manager.play(),
+            KeyCode::Char('q') => self.exit = true,
+            KeyCode::Enter => self.toogle_selected_sound(),
             _ => {}
         }
     }
@@ -98,6 +99,25 @@ impl App {
         }*/
     }
 
+    fn change_sound_volume(&mut self, volume_offset: f32) {
+        if let Some(index) = self.state.selected() {
+            let (selected_source, _) = &self.sound_manager.get_sound_list()[index].clone();
+            self.sound_manager
+                .adjust_volume(selected_source, volume_offset);
+        }
+    }
+
+    fn toogle_selected_sound(&mut self) {
+        self.sound_manager.update_all();
+        if let Some(index) = self.state.selected() {
+            let (selected_source, _) = &self.sound_manager.get_sound_list()[index].clone();
+            if self.sound_manager.is_source_playing(&selected_source) {
+                self.sound_manager.remove_sound(selected_source);
+            } else {
+                let _ = self.sound_manager.add_sound(selected_source);
+            }
+        }
+    }
 }
 
 const TODO_HEADER_STYLE: Style = Style::new().fg(TEAL.c100).bg(TEAL.c800);
@@ -105,21 +125,28 @@ const NORMAL_ROW_BG: Color = TEAL.c900;
 const ALT_ROW_BG_COLOR: Color = TEAL.c800;
 const EDIT_ROW_COLOR: Color = AMBER.c700;
 const EDIT_VALUE_COLOR: Color = AMBER.c500;
-const EDIT_STYLE: Style = Style::new().bg(EDIT_ROW_COLOR).add_modifier(Modifier::BOLD).fg(AMBER.c100);
-const EDIT_VALUE_STYLE: Style = Style::new().bg(EDIT_VALUE_COLOR).add_modifier(Modifier::BOLD).fg(AMBER.c100);
+const EDIT_STYLE: Style = Style::new()
+    .bg(EDIT_ROW_COLOR)
+    .add_modifier(Modifier::BOLD)
+    .fg(AMBER.c100);
+const EDIT_VALUE_STYLE: Style = Style::new()
+    .bg(EDIT_VALUE_COLOR)
+    .add_modifier(Modifier::BOLD)
+    .fg(AMBER.c100);
 const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).add_modifier(Modifier::BOLD);
 const TEXT_FG_COLOR: Color = TEAL.c200;
 const TEXT_STYLE: Style = Style::new().fg(TEXT_FG_COLOR);
 
 impl App {
-
     //Renders header
     fn render_header(area: Rect, buf: &mut Buffer) {
-        Paragraph::new("Todo List Application")
-            .bold()
-            .centered()
-            .bg(TEAL.c500)
-            .render(area, buf);
+        Arc::new(
+            Paragraph::new("Todo List Application")
+                .bold()
+                .centered()
+                .bg(TEAL.c500)
+                .render(area, buf),
+        );
     }
 
     //Renders footer
@@ -130,15 +157,15 @@ impl App {
             "Use ↓↑ to move, ← to unselect, → to change status\n'a' to add a task. 'Delete' to remove a task"
         };
         Paragraph::new(text)
-        .centered()
-        .bg(AMBER.c100)
-        .fg(EDIT_ROW_COLOR)
-        .bold()
-        .render(area, buf);
+            .centered()
+            .bg(AMBER.c100)
+            .fg(EDIT_ROW_COLOR)
+            .bold()
+            .render(area, buf);
     }
 
     //Renders left list
-    /*fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
+    fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
         let block = Block::new()
             .title(Line::raw("Task List").centered())
             .borders(Borders::TOP)
@@ -148,18 +175,15 @@ impl App {
 
         // Iterate through all elements in the `items` and stylize them.
         let items: Vec<ListItem> = self
-            .get_list()
-            .items()
+            .sound_manager
+            .get_sound_list()
             .iter()
             .enumerate()
-            .map(|(i, todo_item)| {
+            .map(|(i, (source, name))| {
                 let color = alternate_colors(i);
-                let displayed_name = todo_item.name.clone();
+                let displayed_name = name.clone();
                 let mut item = ListItem::from(displayed_name).bg(color);
-                if todo_item.done {
-                    item = item.add_modifier(Modifier::CROSSED_OUT);
-                }
-                else if todo_item.priority>5 {
+                if self.sound_manager.is_source_playing(source) {
                     item = item.add_modifier(Modifier::BOLD).fg(AMBER.c100);
                 }
                 item
@@ -168,10 +192,6 @@ impl App {
 
         let mut selected_style = SELECTED_STYLE;
         let mut symbol = " => ";
-        if self.is_edit_mode() {
-            symbol = "===>";
-            selected_style=EDIT_STYLE;//.add_modifier(Modifier::REVERSED);
-        };
 
         let list = List::new(items)
             .block(block)
@@ -182,8 +202,40 @@ impl App {
         StatefulWidget::render(list, area, buf, &mut self.get_state());
     }
 
+    fn render_current_sounds(&self, area: Rect, buf: &mut Buffer) {
+        let block = Block::new()
+            .title(Line::raw("Task List").centered())
+            .borders(Borders::all())
+            .border_set(symbols::border::EMPTY)
+            .border_style(EDIT_STYLE)
+            .bg(NORMAL_ROW_BG);
+
+        let sounds = self.sound_manager.sounds();
+        let mut constr : Vec<Constraint> = vec![];
+        for _i in 0..sounds.len(){
+            constr.push(Constraint::Length(2));
+        }
+        constr.push(Constraint::Fill(1));
+        //const size = constr.len();
+
+        let layouts:[Rect;5] = Layout::vertical(constr)
+        .areas(block.inner(area));
+
+        block.render(area, buf);
+
+        sounds.iter().enumerate().for_each(|(i,s)| {
+            LineGauge::default()
+            .filled_style(Style::default().fg(Color::Blue))
+            .unfilled_style(Style::default().fg(Color::Red))
+            .ratio(s.volume().into())
+            .label(s.get_source().as_str())
+            .line_set(symbols::line::THICK)
+            .render(layouts[i], buf);
+        });
+    }
+
     //Renders selected task (right)
-    fn render_selected_item(&self, area: Rect, buf: &mut Buffer) {
+    /*fn render_selected_item(&self, area: Rect, buf: &mut Buffer) {
         let mut text: Vec<Line<'_>> = vec![];
         let border_style = if self.is_edit_mode() { EDIT_STYLE } else { TODO_HEADER_STYLE };
 
@@ -240,7 +292,7 @@ impl App {
 //Renders whole app
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let footer_length = if true {3} else {2};
+        let footer_length = if true { 3 } else { 2 };
         let [header_area, main_area, footer_area] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Fill(1),
@@ -248,12 +300,17 @@ impl Widget for &mut App {
         ])
         .areas(area);
 
-        let info_weight = if true {2} else {1};
-        let [list_area, item_area] =
-            Layout::horizontal([Constraint::Fill(3-info_weight), Constraint::Fill(info_weight)]).areas(main_area);
+        let info_weight = if true { 2 } else { 1 };
+        let [list_area, item_area] = Layout::horizontal([
+            Constraint::Fill(3 - info_weight),
+            Constraint::Fill(info_weight),
+        ])
+        .areas(main_area);
 
         App::render_header(header_area, buf);
         self.render_footer(footer_area, buf);
+        self.render_list(list_area, buf);
+        self.render_current_sounds(item_area, buf);
     }
 }
 
@@ -269,4 +326,3 @@ pub const fn alternate_colors(i: usize) -> Color {
 mod tests {
     use super::*;
 }
-

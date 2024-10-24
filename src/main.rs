@@ -1,8 +1,10 @@
 use app::App;
 use color_eyre::Result;
+use sound_manager::SoundManager;
 
 mod sound;
 mod app;
+mod sound_manager;
 
 use crate::sound::Sound;
 
@@ -43,8 +45,8 @@ fn main() -> Result<()> {
             return;
         }
     }*/
-
-    let app = App::new(Sound::new(&"./sounds/binaural/binaural-alpha.wav".to_string(), 0.01));
+    cli_log::init_cli_log!();
+    let app = App::new(SoundManager::new());
     color_eyre::install()?;
     let terminal = ratatui::init();
     let app_result = app.run(terminal);
