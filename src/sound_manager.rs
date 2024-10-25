@@ -3,7 +3,7 @@ use cli_log::*;
 use crate::sink_handle::SinkHandle;
 use crate::sound::Sound;
 
-const MAX_SOUNDS: usize = 3;
+const MAX_SOUNDS: usize = 1;
 
 pub struct SoundManager {
     available_sounds: Vec<Sound>,

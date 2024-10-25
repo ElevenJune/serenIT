@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rodio = "0.19.0"
+rodio = {version="0.19.0", features=["minimp3","symphonia-wav","flac"],default-features = false}
 color-eyre = "0.6.3"
 ratatui = "0.29.0"
 cli-log = "2.1.0"
