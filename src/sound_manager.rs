@@ -9,7 +9,8 @@ use std::sync::mpsc;
 
 use crate::sound::Sound;
 
-const MAX_SOUNDS: usize = 4;
+const MAX_SOUNDS: usize = 6;
+
 
 pub struct SoundManager {
     sounds: Vec<Sound>,
@@ -127,6 +128,8 @@ impl SoundManager {
             "./sounds/nature/waves.mp3".to_string(),
             "./sounds/things/wind-chimes.mp3".to_string(),
             "./sounds/binaural/binaural-alpha.wav".to_string(),
+            "./sounds/binaural/binaural-beta.wav".to_string(),
+            "./sounds/binaural/binaural-gamma.wav".to_string(),
         ];
         params.iter().for_each(|path|{
             let filename = path.split('/').last().unwrap();

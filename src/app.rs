@@ -22,7 +22,7 @@ use ratatui::{
 use std::io::{stdout, Stdout, Write};
 use std::sync::Arc;
 
-use crate::sound_manager::SoundManager;
+use crate::sound_manager::{self, SoundManager};
 use color_eyre::Result;
 
 pub struct App {
@@ -167,7 +167,7 @@ impl App {
     //Renders left list
     fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
         let block = Block::new()
-            .title(Line::raw("Task List").centered())
+            .title(Line::raw("Sounds List").centered())
             .borders(Borders::TOP)
             .border_set(symbols::border::EMPTY)
             .border_style(TODO_HEADER_STYLE)
@@ -204,7 +204,7 @@ impl App {
 
     fn render_current_sounds(&self, area: Rect, buf: &mut Buffer) {
         let block = Block::new()
-            .title(Line::raw("Task List").centered())
+            .title(Line::raw("Mixer").centered())
             .borders(Borders::all())
             .border_set(symbols::border::EMPTY)
             .border_style(EDIT_STYLE)
@@ -213,24 +213,38 @@ impl App {
         let sounds = self.sound_manager.sounds();
         let mut constr : Vec<Constraint> = vec![];
         for _i in 0..sounds.len(){
-            constr.push(Constraint::Length(2));
+            constr.push(Constraint::Length(1));
+            constr.push(Constraint::Length(1));
+            constr.push(Constraint::Length(1));
         }
         constr.push(Constraint::Fill(1));
-        //const size = constr.len();
+        const SIZE :usize = 4*3+1;
 
-        let layouts:[Rect;5] = Layout::vertical(constr)
-        .areas(block.inner(area));
+        let layouts = Layout::vertical(constr)
+        .split(block.inner(area));
+
+        //let mut linegauges: Vec<LineGauge> = Vec::new();
+        /*let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints(sounds.iter().map(|_| Constraint::Fill(1)).collect::<Vec<_>>())
+        .split(area);*/
 
         block.render(area, buf);
 
         sounds.iter().enumerate().for_each(|(i,s)| {
+            if !s.is_playing() {return;}
+
+            Paragraph::new(s.get_source().as_str())
+            .wrap(Wrap { trim: false })
+            .render(layouts[3*i], buf);
+
             LineGauge::default()
             .filled_style(Style::default().fg(Color::Blue))
             .unfilled_style(Style::default().fg(Color::Red))
             .ratio(s.volume().into())
-            .label(s.get_source().as_str())
             .line_set(symbols::line::THICK)
-            .render(layouts[i], buf);
+            .render(layouts[3*i+1], buf);
         });
     }
 
