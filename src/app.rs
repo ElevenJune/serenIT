@@ -1,8 +1,6 @@
-use ratatui::prelude::*;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
-    prelude::Span,
     style::{
         palette::tailwind::{AMBER, TEAL},
         Color, Modifier, Style, Stylize,
@@ -10,8 +8,8 @@ use ratatui::{
     symbols::{self},
     text::Line,
     widgets::{
-        Block, Borders, HighlightSpacing, List, ListItem, Padding, Paragraph, StatefulWidget,
-        Widget, Wrap, LineGauge
+        Block, Borders, HighlightSpacing, LineGauge, List, ListItem, Paragraph, StatefulWidget,
+        Widget, Wrap,
     },
 };
 use ratatui::{
@@ -19,10 +17,9 @@ use ratatui::{
     widgets::ListState,
     DefaultTerminal,
 };
-use std::io::{stdout, Stdout, Write};
 use std::sync::Arc;
 
-use crate::sound_manager::{self, SoundManager};
+use crate::sound_manager::SoundManager;
 use color_eyre::Result;
 
 pub struct App {
@@ -78,7 +75,7 @@ impl App {
         }
     }
 
-    fn select_none(&mut self) {
+    fn _select_none(&mut self) {
         self.state.select(None);
     }
 
@@ -89,7 +86,7 @@ impl App {
         self.state.select_previous();
     }
 
-    fn select_first(&mut self) {
+    fn _select_first(&mut self) {
         self.state.select_first();
     }
 
@@ -101,21 +98,18 @@ impl App {
 
     fn change_sound_volume(&mut self, volume_offset: f32) {
         if let Some(index) = self.state.selected() {
-            let (selected_source, _) = &self.sound_manager.get_sound_list()[index].clone();
-            self.sound_manager
-                .adjust_volume(selected_source, volume_offset);
+            let sm = &mut self.sound_manager;
+            let name = sm.get_sound_name_by_index(index).to_string().clone();
+            sm.adjust_volume(name.as_str(), volume_offset);
         }
     }
 
     fn toogle_selected_sound(&mut self) {
         self.sound_manager.update_all();
         if let Some(index) = self.state.selected() {
-            let (selected_source, _) = &self.sound_manager.get_sound_list()[index].clone();
-            if self.sound_manager.is_source_playing(&selected_source) {
-                self.sound_manager.remove_sound(selected_source);
-            } else {
-                let _ = self.sound_manager.add_sound(selected_source);
-            }
+            let sm = &mut self.sound_manager;
+            let name = sm.get_sound_name_by_index(index).to_string().clone();
+            let _ = sm.toggle_sound(name.as_str());
         }
     }
 }
@@ -124,18 +118,18 @@ const TODO_HEADER_STYLE: Style = Style::new().fg(TEAL.c100).bg(TEAL.c800);
 const NORMAL_ROW_BG: Color = TEAL.c900;
 const ALT_ROW_BG_COLOR: Color = TEAL.c800;
 const EDIT_ROW_COLOR: Color = AMBER.c700;
-const EDIT_VALUE_COLOR: Color = AMBER.c500;
+const _EDIT_VALUE_COLOR: Color = AMBER.c500;
 const EDIT_STYLE: Style = Style::new()
     .bg(EDIT_ROW_COLOR)
     .add_modifier(Modifier::BOLD)
     .fg(AMBER.c100);
-const EDIT_VALUE_STYLE: Style = Style::new()
-    .bg(EDIT_VALUE_COLOR)
+const _EDIT_VALUE_STYLE: Style = Style::new()
+    .bg(_EDIT_VALUE_COLOR)
     .add_modifier(Modifier::BOLD)
     .fg(AMBER.c100);
 const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).add_modifier(Modifier::BOLD);
-const TEXT_FG_COLOR: Color = TEAL.c200;
-const TEXT_STYLE: Style = Style::new().fg(TEXT_FG_COLOR);
+const _TEXT_FG_COLOR: Color = TEAL.c200;
+const _TEXT_STYLE: Style = Style::new().fg(_TEXT_FG_COLOR);
 
 impl App {
     //Renders header
@@ -179,19 +173,19 @@ impl App {
             .get_sound_list()
             .iter()
             .enumerate()
-            .map(|(i, (source, name))| {
+            .map(|(i, s)| {
                 let color = alternate_colors(i);
-                let displayed_name = name.clone();
-                let mut item = ListItem::from(displayed_name).bg(color);
-                if self.sound_manager.is_source_playing(source) {
+                let name = s.name();
+                let mut item = ListItem::from(name).bg(color);
+                if self.sound_manager.is_sound_playing(name) {
                     item = item.add_modifier(Modifier::BOLD).fg(AMBER.c100);
                 }
                 item
             })
             .collect();
 
-        let mut selected_style = SELECTED_STYLE;
-        let mut symbol = " => ";
+        let selected_style = SELECTED_STYLE;
+        let symbol = " => ";
 
         let list = List::new(items)
             .block(block)
@@ -199,7 +193,7 @@ impl App {
             .highlight_symbol(symbol)
             .highlight_spacing(HighlightSpacing::Always);
 
-        StatefulWidget::render(list, area, buf, &mut self.get_state());
+        StatefulWidget::render(list, area, buf, &mut self.state);
     }
 
     fn render_current_sounds(&self, area: Rect, buf: &mut Buffer) {
@@ -210,97 +204,36 @@ impl App {
             .border_style(EDIT_STYLE)
             .bg(NORMAL_ROW_BG);
 
-        let sounds = self.sound_manager.sounds();
-        let mut constr : Vec<Constraint> = vec![];
-        for _i in 0..sounds.len(){
+        let sounds = self.sound_manager.sinks();
+        let mut constr: Vec<Constraint> = vec![];
+        for _i in 0..sounds.len() {
             constr.push(Constraint::Length(1));
             constr.push(Constraint::Length(1));
             constr.push(Constraint::Length(1));
         }
         constr.push(Constraint::Fill(1));
-        const SIZE :usize = 4*3+1;
 
-        let layouts = Layout::vertical(constr)
-        .split(block.inner(area));
-
-        //let mut linegauges: Vec<LineGauge> = Vec::new();
-        /*let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints(sounds.iter().map(|_| Constraint::Fill(1)).collect::<Vec<_>>())
-        .split(area);*/
+        let layouts = Layout::vertical(constr).split(block.inner(area));
 
         block.render(area, buf);
 
-        sounds.iter().enumerate().for_each(|(i,s)| {
-            if !s.is_playing() {return;}
+        sounds.iter().enumerate().for_each(|(i, s)| {
+            if !s.is_playing() {
+                return;
+            }
 
             Paragraph::new(s.get_source().as_str())
-            .wrap(Wrap { trim: false })
-            .render(layouts[3*i], buf);
+                .wrap(Wrap { trim: false })
+                .render(layouts[3 * i], buf);
 
             LineGauge::default()
-            .filled_style(Style::default().fg(Color::Blue))
-            .unfilled_style(Style::default().fg(Color::Red))
-            .ratio(s.volume().into())
-            .line_set(symbols::line::THICK)
-            .render(layouts[3*i+1], buf);
+                .filled_style(Style::default().fg(Color::Blue))
+                .unfilled_style(Style::default().fg(Color::Red))
+                .ratio(s.volume().into())
+                .line_set(symbols::line::THICK)
+                .render(layouts[3 * i + 1], buf);
         });
     }
-
-    //Renders selected task (right)
-    /*fn render_selected_item(&self, area: Rect, buf: &mut Buffer) {
-        let mut text: Vec<Line<'_>> = vec![];
-        let border_style = if self.is_edit_mode() { EDIT_STYLE } else { TODO_HEADER_STYLE };
-
-        match &self.get_selected() {
-            Some(i) => {
-                let task = self.get_list().task(*i);
-                let style = if self.is_edit_mode() { EDIT_VALUE_STYLE } else { TEXT_STYLE };
-
-                let mut name_line = vec!["Name : ".red()];
-
-                let mut priority_line = vec!["Priority : ".red()];
-
-                let state_line = vec![
-                    "Done : ".red(),
-                    Span::styled(format!("{}", task.done), TEXT_STYLE),
-                ];
-
-                if self.is_edit_mode() {
-                    name_line.push(Span::styled(self.get_edit_name(), style));
-                    priority_line.push(Span::styled(format!("{}", self.get_edit_priority()), style));
-                    name_line.push("_".fg(EDIT_VALUE_COLOR).add_modifier(Modifier::BOLD));
-                    priority_line.push(" (-/+)".fg(EDIT_VALUE_COLOR).bold());
-                } else {
-                    name_line.push(Span::styled(&task.name, style));
-                    priority_line.push(Span::styled(format!("{}", task.priority), TEXT_STYLE));
-                }
-
-                text.push(Line::from(name_line));
-                text.push(Line::from(priority_line));
-                text.push(Line::from(state_line));
-            }
-            None => {
-                text.push(Line::styled("Select a task", Style::new().gray().italic()));
-            }
-        }
-
-        // We show the list item's info under the list in this paragraph
-        let block = Block::new()
-            .title(Line::raw("Task Information").centered())
-            .borders(Borders::all())
-            .border_set(symbols::border::EMPTY)
-            .border_style(border_style)
-            .bg(NORMAL_ROW_BG)
-            .padding(Padding::horizontal(1));
-
-        // We can now render the item info
-        Paragraph::new(text)
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .render(area, buf);
-    }*/
 }
 
 //Renders whole app
@@ -334,9 +267,4 @@ pub const fn alternate_colors(i: usize) -> Color {
     } else {
         ALT_ROW_BG_COLOR
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }
