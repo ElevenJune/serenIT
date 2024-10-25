@@ -3,7 +3,7 @@ use cli_log::*;
 use crate::sink_handle::SinkHandle;
 use crate::sound::Sound;
 
-const MAX_SOUNDS: usize = 1;
+const MAX_SOUNDS: usize = 8;
 
 pub struct SoundManager {
     available_sounds: Vec<Sound>,
@@ -44,6 +44,10 @@ impl SoundManager {
 
     pub fn get_sound_name_by_index(&self, index: usize) -> &str {
         self.available_sounds[index].name()
+    }
+
+    pub fn get_sound_name_by_source(&self, source: &str) -> &str {
+        self.available_sounds.iter().find(|s| s.path() == source).unwrap().name()
     }
 
     pub fn is_source_playing(&self, source: &str) -> bool {
@@ -257,14 +261,16 @@ impl SoundManager {
             "./sounds/urban/traffic.mp3",
         ];
         params.iter().for_each(|path| {
-            let filename = path.split('/').last().unwrap();
-            let volume = if filename.contains("binaural") {
+            let folders = path.split("/").collect::<Vec<&str>>();
+            let filename = folders[folders.len() - 1];
+            let category = folders[folders.len() - 2];
+            let volume = if filename.contains("binaural") || filename.contains("noise") {
                 0.2
             } else {
                 1.
             };
             self.available_sounds
-                .push(Sound::new(filename, path, volume));
+                .push(Sound::new(filename, path, category, volume));
         });
     }
 }

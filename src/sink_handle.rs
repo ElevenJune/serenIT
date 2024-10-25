@@ -2,7 +2,6 @@ use rodio::source::Source;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
 use std::fs::File;
 use std::io::BufReader;
-use std::time::Duration;
 pub struct SinkHandle {
     _stream: OutputStream,
     _stream_handle: OutputStreamHandle,
@@ -57,7 +56,7 @@ impl SinkHandle {
     pub fn add_to_queue(&mut self, source: &String) {
         let file: BufReader<File> = BufReader::new(File::open(source).unwrap());
         let buffer = Decoder::new(file).unwrap();
-        self.sink.append(buffer.take_duration(Duration::new(60,0)).repeat_infinite());
+        self.sink.append(buffer.repeat_infinite());
     }
 
     pub fn update(&mut self) {

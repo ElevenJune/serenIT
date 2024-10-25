@@ -176,7 +176,8 @@ impl App {
             .map(|(i, s)| {
                 let color = alternate_colors(i);
                 let name = s.name();
-                let mut item = ListItem::from(name).bg(color);
+                let displayed_name = format!("[{}] {}",s.category().to_uppercase(),s.name());
+                let mut item = ListItem::from(displayed_name).bg(color);
                 if self.sound_manager.is_sound_playing(name) {
                     item = item.add_modifier(Modifier::BOLD).fg(AMBER.c100);
                 }
@@ -222,7 +223,7 @@ impl App {
                 return;
             }
 
-            Paragraph::new(s.get_source().as_str())
+            Paragraph::new(self.sound_manager.get_sound_name_by_source(&s.get_source()))
                 .wrap(Wrap { trim: false })
                 .render(layouts[3 * i], buf);
 
@@ -247,10 +248,9 @@ impl Widget for &mut App {
         ])
         .areas(area);
 
-        let info_weight = if true { 2 } else { 1 };
         let [list_area, item_area] = Layout::horizontal([
-            Constraint::Fill(3 - info_weight),
-            Constraint::Fill(info_weight),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
         ])
         .areas(main_area);
 
