@@ -1,20 +1,41 @@
-use cli_log::*;
-
 use crate::sink_handle::SinkHandle;
 use crate::sound::Sound;
+use cli_log::*;
+use homedir::my_home;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{Read, Write};
+use thiserror::Error;
 
 const MAX_SOUNDS: usize = 8;
 
 pub struct SoundManager {
     available_sounds: Vec<Sound>,
     sinks: Vec<SinkHandle>,
+    playing_sounds: HashMap<String, usize>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SoundData {
+    pub source: String,
+    pub volume: f32,
 }
 
 pub enum SoundManagerError {
     NoAvailableSound,
     AlreadyPlaying,
+    AlreadyStopped,
     SoundDoesNotExists,
     OtherError,
+}
+
+#[derive(Debug, Error)]
+pub enum FileError {
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error),
 }
 
 impl SoundManager {
@@ -26,143 +47,149 @@ impl SoundManager {
         let mut sm = SoundManager {
             sinks,
             available_sounds: vec![],
+            playing_sounds: HashMap::new(),
         };
         sm.load_available_sounds();
+        //sm.demo();
+        let mut path = "".to_string();
+        match my_home() {
+            Ok(d) => match d {
+                Some(p) => path = format!("{}/.config/moodist/sounds.json", p.to_str().unwrap()),
+                None => {}
+            },
+            Err(_e) => {
+                sm.demo();
+            }
+        }
+
+        let res = sm.read_from_file(path.as_str());
+        info!("Loading from file: {} {:?}", path, res);
         sm
     }
 
+    //===== Getters
     pub fn get_sound_list(&self) -> &Vec<Sound> {
         &self.available_sounds
     }
 
-    pub fn is_sound_playing(&self, name: &str) -> bool {
-        match self.get_sound_by_name(name) {
+    pub fn playing_sounds(&self) -> &HashMap<String, usize> {
+        &self.playing_sounds
+    }
+
+    pub fn is_sound_playing(&self, path: &str) -> bool {
+        match self.get_sound_by_path(path) {
             Some(s) => self.is_source_playing(s.path()),
             None => false,
         }
     }
 
-    pub fn get_sound_name_by_index(&self, index: usize) -> &str {
-        self.available_sounds[index].name()
+    pub fn get_sound_path_by_index(&self, index: usize) -> &str {
+        self.available_sounds[index].path()
     }
 
-    pub fn get_sound_name_by_source(&self, source: &str) -> &str {
-        self.available_sounds.iter().find(|s| s.path() == source).unwrap().name()
+    fn is_source_playing(&self, source: &str) -> bool {
+        if !self.playing_sounds.contains_key(source) {
+            return false;
+        }
+        let sink_index = self.playing_sounds.get(source).unwrap();
+        self.sinks[*sink_index].is_playing()
     }
 
-    pub fn is_source_playing(&self, source: &str) -> bool {
-        self.sinks
-            .iter()
-            .any(|s| s.get_source() == source && s.is_playing())
+    pub fn get_sound_by_path(&self, path: &str) -> Option<&Sound> {
+        self.available_sounds.iter().find(|s| s.path() == path)
     }
 
-    pub fn toggle_sound(&mut self, name: &str) -> Result<(), SoundManagerError> {
-        let res = if self.is_sound_playing(name) {
-            self.remove_sound(name)
+    //===== Actions
+    pub fn toggle_sound(&mut self, path: &str) -> Result<(), SoundManagerError> {
+        let res = if self.is_sound_playing(path) {
+            self.remove_sound(path)
         } else {
-            self.add_sound(name)
+            self.add_sound(path)
         };
-        self.update_all();
-        self.order_sinks_by_playing();
         res
     }
 
-    pub fn add_sound(&mut self, name: &str) -> Result<(), SoundManagerError> {
-        self.update_all();
-        let sound = match self.get_sound_by_name(name) {
-            Some(s) => s,
-            None => return Err(SoundManagerError::SoundDoesNotExists),
-        };
-        if self.is_sound_playing(name) {
-            return Err(SoundManagerError::AlreadyPlaying);
-        }
-        let path = &sound.path().to_string().clone();
+    pub fn add_sound(&mut self, path: &str) -> Result<(), SoundManagerError> {
+        let sound = self
+            .get_sound_by_path(path)
+            .ok_or(SoundManagerError::SoundDoesNotExists)?;
+
+        let path = &path.to_string();
         let volume = sound.volume();
-        let res = match self.find_available() {
-            Some(i) => {
-                info!("Playing {} with volume {} on sink {}",path, volume, i);
-                self.sinks[i].set_volume(volume);
-                self.sinks[i].set_source(path);
-                self.sinks[i].play();
-                Ok(())
-            }
+
+        // Find an available sink or overwrite the last one
+        let sink_index = match self.find_available() {
+            Some(i) => i,
             None => {
                 self.overwrite_last(path, volume);
-                warn!("{} overwrote last sound", path);
-                Err(SoundManagerError::NoAvailableSound)
+                return Err(SoundManagerError::NoAvailableSound);
             }
         };
-        self.update_all();
-        res
-    }
 
-    pub fn get_sound_by_name(&self, name: &str) -> Option<&Sound> {
-        self.available_sounds.iter().find(|s| s.name() == name)
-    }
-
-    pub fn order_sinks_by_playing(&mut self) {
-        self.sinks
-            .sort_by(|a, b| b.is_playing().cmp(&a.is_playing()));
-    }
-
-    pub fn remove_sound(&mut self, name: &str) -> Result<(), SoundManagerError> {
-        let sound = match self.get_sound_by_name(name) {
-            Some(s) => s,
-            None => return Err(SoundManagerError::SoundDoesNotExists),
-        };
-        if !self.is_sound_playing(name) {
-            return Err(SoundManagerError::AlreadyPlaying);
-        }
-        let path = &sound.path().to_string();
-        self.sinks
-            .iter_mut()
-            .find(|s| s.get_source() == path && s.is_playing())
-            .map(|s| s.stop());
+        // Set the source and volume of the found sink
+        self.set_sink_source(sink_index, path, volume);
         Ok(())
     }
 
-    pub fn adjust_volume(&mut self, name: &str, volume_offset: f32) {
-        //Store new volume
-        match self.available_sounds.iter_mut().find(|s| s.name() == name) {
-            Some(s) => {
-                let mut new_volume = s.volume().clone() + volume_offset;
-                if new_volume > 2. {
-                    new_volume = 2.;
-                } else if new_volume < 0. {
-                    new_volume = 0.;
+    pub fn remove_sound(&mut self, path: &str) -> Result<(), SoundManagerError> {
+        if let Some(_) = self.get_sound_by_path(path) {
+            let path = &path.to_string();
+            match self.playing_sounds.get(path) {
+                Some(i) => {
+                    info!("Sound {} from sink {} stopped", path, i);
+                    self.sinks[*i].stop();
+                    self.playing_sounds.remove(path);
+                    Ok(())
                 }
-                s.set_volume(new_volume);
-                self.sinks.iter_mut().for_each(|sh| {
-                    if sh.get_source() == s.path() {
-                        sh.set_volume(new_volume);
-                    }
-                });
+                None => Err(SoundManagerError::AlreadyStopped),
             }
-            None => {}
+        } else {
+            Err(SoundManagerError::SoundDoesNotExists)
         }
-        //Update volume
     }
 
-    pub fn get_volume(&self) -> f32 {
-        self.sinks[0].volume()
-    }
+    pub fn adjust_volume(&mut self, path: &str, volume_offset: f32) {
+        // Find the sound to adjust
+        if let Some(sound) = self.available_sounds.iter_mut().find(|s| s.path() == path) {
+            // Calculate the new volume
+            let mut new_volume = sound.volume() + volume_offset;
+            new_volume = new_volume.clamp(0.0, 2.0);
 
-    pub fn sinks(&self) -> &Vec<SinkHandle> {
-        &self.sinks
+            // Update the sound's volume
+            sound.set_volume(new_volume);
+
+            // Find the corresponding sink and update its volume
+            if let Some(i) = self.playing_sounds.get(sound.path()) {
+                self.sinks[*i].set_volume(new_volume);
+            }
+        }
     }
 
     fn overwrite_last(&mut self, source: &String, volume: f32) {
-        match self.sinks.first_mut() {
-            Some(s) => {
-                s.stop();
-                s.set_volume(volume);
-                s.set_source(source);
-                s.play();
+        let mut path = "".to_string();
+        let mut sink_index = MAX_SOUNDS;
+        self.playing_sounds.keys().for_each(|p| {
+            let index = self.playing_sounds.get(p).unwrap().clone();
+            if index == self.sinks.len() - 1 {
+                path = p.clone();
+                sink_index = index;
             }
-            None => {}
-        }
+        });
+        self.playing_sounds.remove(&path);
+        self.set_sink_source(sink_index, source, volume);
     }
 
+    fn set_sink_source(&mut self, sink_index: usize, path: &String, volume: f32) {
+        info!("Playing sound {} to sink {}", path, sink_index);
+        self.playing_sounds.insert(path.clone(), sink_index);
+
+        let sink = &mut self.sinks[sink_index];
+        sink.set_volume(volume);
+        sink.set_source(path);
+        sink.play();
+    }
+
+    //===== Misc
     fn find_available(&self) -> Option<usize> {
         self.sinks
             .iter()
@@ -171,10 +198,63 @@ impl SoundManager {
             .map(|(i, _)| i)
     }
 
-    pub fn update_all(&mut self) {
-        self.sinks
-            .iter_mut()
-            .for_each(|s: &mut SinkHandle| s.update());
+    pub fn demo(&mut self) {
+        let params = vec![
+            ("waves.mp3", -0.3),
+            ("birds.mp3", -0.4),
+            ("wind-chimes.mp3", -0.6),
+            ("binaural-alpha.wav", -0.15),
+        ];
+        info!("Demo: {:?}", params);
+        params.iter().for_each(|(name, volume)| {
+            let _ = self.toggle_sound(name);
+            self.adjust_volume(name, *volume);
+        });
+    }
+
+    pub fn save_to(&self, path: String) -> Result<(), FileError> {
+        //let path = Self::load_path();
+        // Create/open the file
+        let mut f = File::create(path)?;
+
+        // Serialize the struct
+        let mut config:Vec<SoundData> = vec![];
+        self.playing_sounds
+            .keys()
+            .for_each(|path| {
+                if let Some(sound) = self.get_sound_by_path(path){
+                config.push(SoundData {
+                    source: path.clone(),
+                    volume: sound.volume(),
+                });
+            }
+            });
+        let serialized = serde_json::to_string(&config)?;
+
+        info!("Saving to file: {}", serialized);
+
+        // Write to file
+        f.write_all(serialized.as_bytes())?;
+
+        Ok(())
+    }
+
+    fn read_from_file(&mut self, path: &str) -> Result<(), FileError> {
+        let mut file = File::open(path)?;
+        let mut buff = String::new();
+        file.read_to_string(&mut buff)?;
+        let config: Vec<SoundData> = serde_json::from_str(&buff)?;
+        for (i, s) in config.iter().enumerate() {
+            if s.source.len() > 0 {
+                info!("Loading from file: {}, with volume {}", s.source, s.volume);
+                self.available_sounds.iter_mut()
+                .find(|sound| sound.path() == s.source)
+                .map(|sound| sound.set_volume(s.volume));
+
+                self.set_sink_source(i, &s.source, s.volume);
+            }
+        }
+        Ok(())
     }
 
     fn load_available_sounds(&mut self) {

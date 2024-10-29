@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use crate::sound_manager::SoundManager;
 use color_eyre::Result;
+use cli_log::*;
 
 pub struct App {
     exit: bool,
@@ -99,17 +100,18 @@ impl App {
     fn change_sound_volume(&mut self, volume_offset: f32) {
         if let Some(index) = self.state.selected() {
             let sm = &mut self.sound_manager;
-            let name = sm.get_sound_name_by_index(index).to_string().clone();
-            sm.adjust_volume(name.as_str(), volume_offset);
+            let path = sm.get_sound_path_by_index(index).to_string().clone();
+            sm.adjust_volume(path.as_str(), volume_offset);
+            let _ = sm.save_to("/home/guillaume/.config/moodist/sounds.json".to_string());
         }
     }
 
     fn toogle_selected_sound(&mut self) {
-        self.sound_manager.update_all();
         if let Some(index) = self.state.selected() {
             let sm = &mut self.sound_manager;
-            let name = sm.get_sound_name_by_index(index).to_string().clone();
-            let _ = sm.toggle_sound(name.as_str());
+            let path = sm.get_sound_path_by_index(index).to_string().clone();
+            info!("Toggling sound: {}", path);
+            let _ = sm.toggle_sound(path.as_str());
         }
     }
 }
@@ -175,10 +177,9 @@ impl App {
             .enumerate()
             .map(|(i, s)| {
                 let color = alternate_colors(i);
-                let name = s.name();
                 let displayed_name = format!("[{}] {}",s.category().to_uppercase(),s.name());
                 let mut item = ListItem::from(displayed_name).bg(color);
-                if self.sound_manager.is_sound_playing(name) {
+                if self.sound_manager.is_sound_playing(s.path()) {
                     item = item.add_modifier(Modifier::BOLD).fg(AMBER.c100);
                 }
                 item
@@ -205,7 +206,7 @@ impl App {
             .border_style(EDIT_STYLE)
             .bg(NORMAL_ROW_BG);
 
-        let sounds = self.sound_manager.sinks();
+        let sounds = self.sound_manager.playing_sounds();
         let mut constr: Vec<Constraint> = vec![];
         for _i in 0..sounds.len() {
             constr.push(Constraint::Length(1));
@@ -218,19 +219,25 @@ impl App {
 
         block.render(area, buf);
 
-        sounds.iter().enumerate().for_each(|(i, s)| {
-            if !s.is_playing() {
+        sounds.iter().enumerate().for_each(|(i, (p,_))| {
+            let path = p.as_str();
+            if !self.sound_manager.is_sound_playing(path) {
                 return;
             }
 
-            Paragraph::new(self.sound_manager.get_sound_name_by_source(&s.get_source()))
+            let volume = match self.sound_manager.get_sound_by_path(path){
+                Some(sound) => sound.volume(),
+                None => 0.0
+            };
+
+            Paragraph::new(path)
                 .wrap(Wrap { trim: false })
                 .render(layouts[3 * i], buf);
 
             LineGauge::default()
                 .filled_style(Style::default().fg(Color::Blue))
                 .unfilled_style(Style::default().fg(Color::Red))
-                .ratio(s.volume().into())
+                .ratio(volume.into())
                 .line_set(symbols::line::THICK)
                 .render(layouts[3 * i + 1], buf);
         });

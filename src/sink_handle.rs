@@ -1,14 +1,13 @@
 use rodio::source::Source;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
+
 use std::fs::File;
 use std::io::BufReader;
+
 pub struct SinkHandle {
     _stream: OutputStream,
     _stream_handle: OutputStreamHandle,
-    sink: Sink,
-    source: String,
-    loaded: bool,
-    is_playing: bool,
+    sink: Sink
 }
 
 impl SinkHandle {
@@ -24,63 +23,40 @@ impl SinkHandle {
         SinkHandle {
             _stream: stream,
             _stream_handle: stream_handle,
-            sink,
-            source: "".to_string(),
-            loaded: false,
-            is_playing: false,
+            sink
         }
-    }
-
-    pub fn set_source(&mut self, source: &String) {
-        self.clear_if_playing();
-        self.source = source.clone();
-        self.add_to_queue(&self.source.clone());
-    }
-
-    pub fn get_source(&self) -> &String {
-        &self.source
-    }
-
-    pub fn volume(&self) -> f32 {
-        self.sink.volume()
-    }
-
-    fn load(&mut self) {
-        if self.loaded {
-            return;
-        }
-        
-        self.loaded = true;
-    }
-
-    pub fn add_to_queue(&mut self, source: &String) {
-        let file: BufReader<File> = BufReader::new(File::open(source).unwrap());
-        let buffer = Decoder::new(file).unwrap();
-        self.sink.append(buffer.repeat_infinite());
-    }
-
-    pub fn update(&mut self) {
-        let queue_size = self.sink.len();
-        self.is_playing = queue_size != 0;
-    }
-
-    pub fn play(&mut self) {
-        self.sink.play();
-        self.update();
     }
 
     pub fn is_playing(&self) -> bool {
         self.sink.len()!=0
     }
 
-    pub fn stop(&mut self) {
-        self.sink.stop();
-        self.sink.clear();
-        self.update();
+    pub fn volume(&self) -> f32 {
+        self.sink.volume()
+    }
+
+    pub fn set_source(&mut self, source: &str) {
+        self.clear_if_playing();
+        self.add_to_queue(source);
     }
 
     pub fn set_volume(&self, volume: f32) {
         self.sink.set_volume(volume);
+    }
+
+    pub fn play(&mut self) {
+        self.sink.play();
+    }
+
+    pub fn stop(&mut self) {
+        self.sink.stop();
+        self.sink.clear();
+    }
+
+    fn add_to_queue(&mut self, source: &str) {
+        let file: BufReader<File> = BufReader::new(File::open(source).unwrap());
+        let buffer = Decoder::new(file).unwrap();
+        self.sink.append(buffer.repeat_infinite());
     }
 
     fn clear_if_playing(&mut self) {
