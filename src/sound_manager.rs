@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
 use thiserror::Error;
+use std::path::Path;
 
 const MAX_SOUNDS: usize = 8;
 
@@ -14,6 +15,8 @@ pub struct SoundManager {
     available_sounds: Vec<Sound>,
     sinks: Vec<SinkHandle>,
     playing_sounds: HashMap<String, usize>,
+    config_path: String,
+    categories: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -48,22 +51,14 @@ impl SoundManager {
             sinks,
             available_sounds: vec![],
             playing_sounds: HashMap::new(),
+            config_path: "".to_string(),
+            categories: vec![],
         };
         sm.load_available_sounds();
-        //sm.demo();
-        let mut path = "".to_string();
-        match my_home() {
-            Ok(d) => match d {
-                Some(p) => path = format!("{}/.config/moodist/sounds.json", p.to_str().unwrap()),
-                None => {}
-            },
-            Err(_e) => {
-                sm.demo();
-            }
-        }
-
-        let res = sm.read_from_file(path.as_str());
-        info!("Loading from file: {} {:?}", path, res);
+        sm.load_presets().unwrap_or_else(|err| {
+            warn!("No presets found, {}. Loading default demo",err);
+            sm.demo();
+        });
         sm
     }
 
@@ -76,23 +71,37 @@ impl SoundManager {
         &self.playing_sounds
     }
 
+    pub fn categories(&self) -> &Vec<String> {
+        &self.categories
+    }
+
     pub fn is_sound_playing(&self, path: &str) -> bool {
-        match self.get_sound_by_path(path) {
-            Some(s) => self.is_source_playing(s.path()),
-            None => false,
+        if !self.playing_sounds.contains_key(path) {
+            return false;
         }
+        let sink_index = self.playing_sounds.get(path).unwrap();
+        self.sinks[*sink_index].is_playing()
     }
 
     pub fn get_sound_path_by_index(&self, index: usize) -> &str {
         self.available_sounds[index].path()
     }
 
-    fn is_source_playing(&self, source: &str) -> bool {
-        if !self.playing_sounds.contains_key(source) {
-            return false;
+    pub fn get_sound_path_by_index_and_category(&self, index: usize, category_index : Option<usize>) -> &str {
+        let cat_index = self.available_sounds
+        .iter()
+        .enumerate()
+        .find(|(_,s)| {
+            match category_index {
+                Some(i) => s.category() == self.categories[i],
+                None => true
+            }
+        });
+
+        match cat_index {
+            Some((i,s)) => self.available_sounds[i+index].path(),
+            None => ""
         }
-        let sink_index = self.playing_sounds.get(source).unwrap();
-        self.sinks[*sink_index].is_playing()
     }
 
     pub fn get_sound_by_path(&self, path: &str) -> Option<&Sound> {
@@ -109,7 +118,7 @@ impl SoundManager {
         res
     }
 
-    pub fn add_sound(&mut self, path: &str) -> Result<(), SoundManagerError> {
+    fn add_sound(&mut self, path: &str) -> Result<(), SoundManagerError> {
         let sound = self
             .get_sound_by_path(path)
             .ok_or(SoundManagerError::SoundDoesNotExists)?;
@@ -131,7 +140,7 @@ impl SoundManager {
         Ok(())
     }
 
-    pub fn remove_sound(&mut self, path: &str) -> Result<(), SoundManagerError> {
+    fn remove_sound(&mut self, path: &str) -> Result<(), SoundManagerError> {
         if let Some(_) = self.get_sound_by_path(path) {
             let path = &path.to_string();
             match self.playing_sounds.get(path) {
@@ -148,21 +157,15 @@ impl SoundManager {
         }
     }
 
-    pub fn adjust_volume(&mut self, path: &str, volume_offset: f32) {
-        // Find the sound to adjust
-        if let Some(sound) = self.available_sounds.iter_mut().find(|s| s.path() == path) {
-            // Calculate the new volume
-            let mut new_volume = sound.volume() + volume_offset;
-            new_volume = new_volume.clamp(0.0, 2.0);
+    pub fn adjust_sound_volume(&mut self, path: &str, volume_offset: f32) {
+        self.adjust_volume(path, volume_offset, false);
+    }
 
-            // Update the sound's volume
-            sound.set_volume(new_volume);
-
-            // Find the corresponding sink and update its volume
-            if let Some(i) = self.playing_sounds.get(sound.path()) {
-                self.sinks[*i].set_volume(new_volume);
-            }
-        }
+    pub fn adjust_master_volume(&mut self, volume_offset: f32){
+        let sounds:Vec<String> = self.playing_sounds.keys().map(|path| path.clone()).collect();
+        sounds.iter().for_each(|path| {
+            self.adjust_volume(path, volume_offset, true);
+        });
     }
 
     fn overwrite_last(&mut self, source: &String, volume: f32) {
@@ -179,14 +182,11 @@ impl SoundManager {
         self.set_sink_source(sink_index, source, volume);
     }
 
-    fn set_sink_source(&mut self, sink_index: usize, path: &String, volume: f32) {
-        info!("Playing sound {} to sink {}", path, sink_index);
-        self.playing_sounds.insert(path.clone(), sink_index);
-
-        let sink = &mut self.sinks[sink_index];
-        sink.set_volume(volume);
-        sink.set_source(path);
-        sink.play();
+    pub fn save(&mut self) -> Result<(), FileError> {
+        if self.config_path.is_empty() {
+            return Err(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No config path found")));
+        }
+        self.save_to(self.config_path.clone())
     }
 
     //===== Misc
@@ -198,7 +198,7 @@ impl SoundManager {
             .map(|(i, _)| i)
     }
 
-    pub fn demo(&mut self) {
+    fn demo(&mut self) {
         let params = vec![
             ("waves.mp3", -0.3),
             ("birds.mp3", -0.4),
@@ -208,13 +208,56 @@ impl SoundManager {
         info!("Demo: {:?}", params);
         params.iter().for_each(|(name, volume)| {
             let _ = self.toggle_sound(name);
-            self.adjust_volume(name, *volume);
+            self.adjust_volume(name, *volume, false);
         });
     }
 
-    pub fn save_to(&self, path: String) -> Result<(), FileError> {
-        //let path = Self::load_path();
+    fn adjust_volume(&mut self, path: &str, volume_offset: f32, master:bool) {
+        // Find the sound to adjust
+        if let Some(sound) = self.available_sounds.iter_mut().find(|s| s.path() == path) {
+            // Calculate the new volume
+            let mut new_volume = sound.volume() + volume_offset;
+            new_volume = new_volume.clamp(if master {0.02} else {0.0}, 1.0);
+
+            // Update the sound's volume
+            sound.set_volume(new_volume);
+
+            // Find the corresponding sink and update its volume
+            if let Some(i) = self.playing_sounds.get(sound.path()) {
+                self.sinks[*i].set_volume(new_volume);
+            }
+        }
+    }
+
+    fn set_sink_source(&mut self, sink_index: usize, path: &String, volume: f32) {
+        info!("Playing sound {} to sink {}", path, sink_index);
+        self.playing_sounds.insert(path.clone(), sink_index);
+
+        let sink = &mut self.sinks[sink_index];
+        sink.set_volume(volume);
+        sink.set_source(path);
+        sink.play();
+    }
+
+    fn load_presets(&mut self) -> Result<(), FileError> {
+        let home_dir = my_home().map_err(|e| FileError::IoError(std::io::Error::new(std::io::ErrorKind::Unsupported, e)))?;
+        let path = home_dir.ok_or_else(|| FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")))?
+        .to_str()
+        .unwrap()
+        .to_string() + "/.config/moodist/sounds.json";
+    
+        let res = self.read_from_file(&path);
+        if res.is_ok() {
+            self.config_path = path;
+        }
+        res
+    }
+
+    fn save_to(&self, path: String) -> Result<(), FileError> {
         // Create/open the file
+        let file_path = Path::new(&path);
+        let parent_dir = file_path.parent().ok_or(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No parent directory found")))?;
+        std::fs::create_dir_all(parent_dir)?;
         let mut f = File::create(path)?;
 
         // Serialize the struct
@@ -261,7 +304,6 @@ impl SoundManager {
         self.available_sounds.clear();
         let params: Vec<&str> = vec![
             // sounds/
-            "./sounds/alarm.mp3",
             "./sounds/animals/birds.mp3",
             "./sounds/animals/cat-purring.mp3",
             "./sounds/animals/crickets.mp3",
@@ -339,6 +381,7 @@ impl SoundManager {
             "./sounds/urban/highway.mp3",
             "./sounds/urban/road.mp3",
             "./sounds/urban/traffic.mp3",
+            "./sounds/alarm.mp3",
         ];
         params.iter().for_each(|path| {
             let folders = path.split("/").collect::<Vec<&str>>();
@@ -347,10 +390,13 @@ impl SoundManager {
             let volume = if filename.contains("binaural") || filename.contains("noise") {
                 0.2
             } else {
-                1.
+                0.5
             };
             self.available_sounds
                 .push(Sound::new(filename, path, category, volume));
+            if !self.categories.contains(&category.to_string()) {
+                self.categories.push(category.to_string());
+            }
         });
     }
 }

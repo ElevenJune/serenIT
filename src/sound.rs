@@ -4,7 +4,6 @@ pub struct Sound {
     path: String,
     category: String,
     volume: f32,
-    //sink:Option<SinkHandle>
 }
 
 impl Sound {
@@ -14,7 +13,6 @@ impl Sound {
             path: path.to_string(),
             category: category.to_string(),
             volume,
-            //sink: None,
         }
     }
 
@@ -37,19 +35,4 @@ impl Sound {
     pub fn set_volume(&mut self, volume: f32) {
         self.volume = volume;
     }
-
-    /*pub fn is_playing(&self) -> bool {
-        match &self.sink {
-            Some(sink) => sink.is_playing(),
-            None => false,
-        }
-    }
-
-    pub fn set_sink(&mut self, sink: SinkHandle) {
-        self.sink = Some(sink);
-    }
-
-    pub fn remove_sink(&mut self) {
-        self.sink = None;
-    }*/
 }

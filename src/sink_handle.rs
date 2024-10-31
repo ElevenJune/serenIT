@@ -31,9 +31,6 @@ impl SinkHandle {
         self.sink.len()!=0
     }
 
-    pub fn volume(&self) -> f32 {
-        self.sink.volume()
-    }
 
     pub fn set_source(&mut self, source: &str) {
         self.clear_if_playing();
