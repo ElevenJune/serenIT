@@ -99,7 +99,7 @@ impl SoundManager {
         });
 
         match cat_index {
-            Some((i,s)) => self.available_sounds[i+index].path(),
+            Some((i,_s)) => self.available_sounds[i+index].path(),
             None => ""
         }
     }

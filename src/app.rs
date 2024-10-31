@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use crate::sound_manager::SoundManager;
 use cli_log::*;
-use color_eyre::{owo_colors::OwoColorize, Result};
+use color_eyre::Result;
 
 pub struct App {
     exit: bool,
@@ -162,8 +162,9 @@ const MIXER_BORDERS_STYLE: Style = Style::new()
     .bg(TEAL.c500)
     .add_modifier(Modifier::BOLD);
 const EDIT_ROW_COLOR: Color = AMBER.c700;
-const EDIT_VALUE_COLOR: Color = AMBER.c500;
-const EDIT_STYLE: Style = Style::new()
+const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).add_modifier(Modifier::BOLD);
+//const EDIT_VALUE_COLOR: Color = AMBER.c500;
+/*const EDIT_STYLE: Style = Style::new()
     .bg(EDIT_ROW_COLOR)
     .add_modifier(Modifier::BOLD)
     .fg(AMBER.c100);
@@ -171,9 +172,8 @@ const EDIT_VALUE_STYLE: Style = Style::new()
     .bg(EDIT_VALUE_COLOR)
     .add_modifier(Modifier::BOLD)
     .fg(AMBER.c100);
-const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).add_modifier(Modifier::BOLD);
 const TEXT_FG_COLOR: Color = TEAL.c200;
-const TEXT_STYLE: Style = Style::new().fg(TEXT_FG_COLOR);
+const TEXT_STYLE: Style = Style::new().fg(TEXT_FG_COLOR);*/
 
 impl App {
     //Renders header
