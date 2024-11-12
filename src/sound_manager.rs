@@ -157,6 +157,18 @@ impl SoundManager {
         }
     }
 
+    pub fn toggle_pause_play(&mut self) {
+        if self.sinks.iter().all(|sink| sink.is_paused()) {
+            self.play_all();
+        } else {
+            self.pause_all();
+        }
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.sinks.iter().all(|sink| sink.is_paused())
+    }
+
     pub fn adjust_sound_volume(&mut self, path: &str, volume_offset: f32) {
         self.adjust_volume(path, volume_offset, false);
     }
@@ -196,6 +208,18 @@ impl SoundManager {
             .enumerate()
             .find(|(_, s)| !s.is_playing())
             .map(|(i, _)| i)
+    }
+
+    fn pause_all(&mut self) {
+        self.sinks.iter_mut().for_each(|sink| {
+            sink.pause();
+        });
+    }
+
+    fn play_all(&mut self) {
+        self.sinks.iter_mut().for_each(|sink| {
+            sink.play();
+        });
     }
 
     fn demo(&mut self) {
@@ -244,12 +268,11 @@ impl SoundManager {
         let path = home_dir.ok_or_else(|| FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")))?
         .to_str()
         .unwrap()
-        .to_string() + "/.config/moodist/sounds.json";
+        .to_string() + "/.config/serenIT/sounds.json";
+
+        self.config_path = path.clone();
     
         let res = self.read_from_file(&path);
-        if res.is_ok() {
-            self.config_path = path;
-        }
         res
     }
 

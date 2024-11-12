@@ -71,7 +71,7 @@ impl App {
             KeyCode::Char('i') | KeyCode::Right => self.change_volume(0.02, ctrl_pressed),
             KeyCode::Char('j') | KeyCode::Down => self.select_next(),
             KeyCode::Char('k') | KeyCode::Up => self.select_previous(),
-            KeyCode::Char('g') | KeyCode::Home => {}
+            KeyCode::Char(' ') => {self.sound_manager.toggle_pause_play();},
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
             KeyCode::Char('q') => self.exit = true,
             KeyCode::Char('c') => self.swicth_category(),
@@ -161,7 +161,7 @@ const MIXER_BORDERS_STYLE: Style = Style::new()
     .fg(TEAL.c100)
     .bg(TEAL.c500)
     .add_modifier(Modifier::BOLD);
-const EDIT_ROW_COLOR: Color = AMBER.c700;
+const YELLOW: Color = AMBER.c100;
 const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).add_modifier(Modifier::BOLD);
 //const EDIT_VALUE_COLOR: Color = AMBER.c500;
 /*const EDIT_STYLE: Style = Style::new()
@@ -177,25 +177,27 @@ const TEXT_STYLE: Style = Style::new().fg(TEXT_FG_COLOR);*/
 
 impl App {
     //Renders header
-    fn render_header(area: Rect, buf: &mut Buffer) {
+    fn render_header(&self, area: Rect, buf: &mut Buffer) {
+        let text = format!("SerenIT\n{}",if self.sound_manager.is_paused() {"[Paused]"} else {""});
         Arc::new(
-            Paragraph::new("Ambient Sound Player")
+            Paragraph::new(text)
                 .bold()
                 .centered()
                 .bg(TEAL.c500)
+                .fg(YELLOW)
                 .render(area, buf),
         );
     }
 
     //Renders footer
     fn render_footer(&self, area: Rect, buf: &mut Buffer) {
-        let text = "Add/Remove the selected sound with Enter\n\
-            -/+ to adjust the volume, ctrl+/- to adjust the master volume\n\
+        let text = "Add/Remove the selected sound with Enter, pause/play with space\n\
+            -/+ to adjust the volume, ctrl & -/+ to adjust the master volume\n\
             's' to save, 'c' to swicth category, 'q' to quit";
         Paragraph::new(text)
             .centered()
-            .bg(AMBER.c100)
-            .fg(EDIT_ROW_COLOR)
+            .bg(TEAL.c500)
+            .fg(YELLOW)
             .bold()
             .render(area, buf);
     }
@@ -216,7 +218,7 @@ impl App {
         let category_line = Line::styled(
             "Category: ".to_string() + &category_text,
             TODO_HEADER_STYLE.fg(if self.category.is_some() {
-                AMBER.c100
+                YELLOW
             } else {
                 TEAL.c100
             }),
@@ -335,7 +337,7 @@ impl Widget for &mut App {
         let [list_area, item_area] =
             Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(main_area);
 
-        App::render_header(header_area, buf);
+        self.render_header(header_area, buf);
         self.render_footer(footer_area, buf);
         self.render_list(list_area, buf);
         self.render_current_sounds(item_area, buf);

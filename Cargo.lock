@@ -704,20 +704,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "moodist-rust"
-version = "0.1.0"
-dependencies = [
- "cli-log",
- "color-eyre",
- "homedir",
- "ratatui",
- "rodio",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "ndk"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1084,6 +1070,20 @@ dependencies = [
  "memchr",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serenIT"
+version = "0.1.0"
+dependencies = [
+ "cli-log",
+ "color-eyre",
+ "homedir",
+ "ratatui",
+ "rodio",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

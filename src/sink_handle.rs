@@ -31,6 +31,10 @@ impl SinkHandle {
         self.sink.len()!=0
     }
 
+    pub fn is_paused(&self) -> bool {
+        self.sink.is_paused()
+    }
+
 
     pub fn set_source(&mut self, source: &str) {
         self.clear_if_playing();
@@ -43,6 +47,10 @@ impl SinkHandle {
 
     pub fn play(&mut self) {
         self.sink.play();
+    }
+
+    pub fn pause(&mut self) {
+        self.sink.pause();
     }
 
     pub fn stop(&mut self) {
