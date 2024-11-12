@@ -6,6 +6,7 @@ mod app;
 mod sink_handle;
 mod sound;
 mod sound_manager;
+mod ui;
 
 fn main() -> Result<()> {
     cli_log::init_cli_log!();
@@ -18,7 +19,12 @@ fn main() -> Result<()> {
 }
 
 //Todo
-// - Add a way to stop the sounds
-// - Add a way to change the volume of the sounds
-// - Load a new sound
-// - delete a sink to create a new one
+// - put sounds inside the exe
+// - refactor ui in a seperate file
+// - tab widget
+// - Multiple config files to choose from
+// - switch the volume directly in the mixer
+// - Favorite sounds category
+// - Better UI
+// - small animation ?
+// - tab with logs

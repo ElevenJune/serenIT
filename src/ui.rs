@@ -1,7 +1,6 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
-    prelude::Span,
     style::{
         palette::tailwind::{AMBER, TEAL},
         Color, Modifier, Style, Stylize,
@@ -9,154 +8,189 @@ use ratatui::{
     symbols::{self},
     text::Line,
     widgets::{
-        Block, Borders, HighlightSpacing, List, ListItem, Padding, Paragraph,
-        StatefulWidget, Widget, Wrap,
-    }
+        Block, Borders, HighlightSpacing, LineGauge, List, ListItem, Paragraph, StatefulWidget,
+        Widget, Wrap,
+    },
 };
+use std::sync::Arc;
 use crate::App;
 
-
-const TODO_HEADER_STYLE: Style = Style::new().fg(TEAL.c100).bg(TEAL.c800);
+const TODO_HEADER_STYLE: Style = Style::new()
+    .fg(TEAL.c100)
+    .bg(TEAL.c800)
+    .add_modifier(Modifier::BOLD);
 const NORMAL_ROW_BG: Color = TEAL.c900;
 const ALT_ROW_BG_COLOR: Color = TEAL.c800;
-const EDIT_ROW_COLOR: Color = AMBER.c700;
-const EDIT_VALUE_COLOR: Color = AMBER.c500;
-const EDIT_STYLE: Style = Style::new().bg(EDIT_ROW_COLOR).add_modifier(Modifier::BOLD).fg(AMBER.c100);
-const EDIT_VALUE_STYLE: Style = Style::new().bg(EDIT_VALUE_COLOR).add_modifier(Modifier::BOLD).fg(AMBER.c100);
+const MIXER_BORDERS_STYLE: Style = Style::new()
+    .fg(TEAL.c100)
+    .bg(TEAL.c500)
+    .add_modifier(Modifier::BOLD);
+const YELLOW: Color = AMBER.c100;
 const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).add_modifier(Modifier::BOLD);
+//const EDIT_VALUE_COLOR: Color = AMBER.c500;
+/*const EDIT_STYLE: Style = Style::new()
+    .bg(EDIT_ROW_COLOR)
+    .add_modifier(Modifier::BOLD)
+    .fg(AMBER.c100);
+const EDIT_VALUE_STYLE: Style = Style::new()
+    .bg(EDIT_VALUE_COLOR)
+    .add_modifier(Modifier::BOLD)
+    .fg(AMBER.c100);
 const TEXT_FG_COLOR: Color = TEAL.c200;
-const TEXT_STYLE: Style = Style::new().fg(TEXT_FG_COLOR);
+const TEXT_STYLE: Style = Style::new().fg(TEXT_FG_COLOR);*/
 
 impl App {
-
     //Renders header
-    fn render_header(area: Rect, buf: &mut Buffer) {
-        Paragraph::new("Todo List Application")
-            .bold()
-            .centered()
-            .bg(TEAL.c500)
-            .render(area, buf);
+    fn render_header(&self, area: Rect, buf: &mut Buffer) {
+        let text = format!("SerenIT\n{}",if self.get_sound_manager().is_paused() {"[Paused]"} else {""});
+        Arc::new(
+            Paragraph::new(text)
+                .bold()
+                .centered()
+                .bg(TEAL.c500)
+                .fg(YELLOW)
+                .render(area, buf),
+        );
     }
 
     //Renders footer
     fn render_footer(&self, area: Rect, buf: &mut Buffer) {
-        let text = if true {
-            "[Edit Mode]\nSave with Enter, Cancel with Esc\n-/+ to change priority, type to change name"
-        } else {
-            "Use ↓↑ to move, ← to unselect, → to change status\n'a' to add a task. 'Delete' to remove a task"
-        };
+        let text = "Add/Remove the selected sound with Enter, pause/play with space\n\
+            -/+ to adjust the volume, ctrl & -/+ to adjust the master volume\n\
+            's' to save, 'c' to swicth category, 'q' to quit";
         Paragraph::new(text)
-        .centered()
-        .bg(AMBER.c100)
-        .fg(EDIT_ROW_COLOR)
-        .bold()
-        .render(area, buf);
+            .centered()
+            .bg(TEAL.c500)
+            .fg(YELLOW)
+            .bold()
+            .render(area, buf);
     }
 
     //Renders left list
-    /*fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
-        let block = Block::new()
-            .title(Line::raw("Task List").centered())
-            .borders(Borders::TOP)
-            .border_set(symbols::border::EMPTY)
-            .border_style(TODO_HEADER_STYLE)
-            .bg(NORMAL_ROW_BG);
+    fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
+        //Category
+        let categories = self.get_sound_manager().categories();
+        let category_text = match self.get_category() {
+            Some(i) => format!(
+                "{}/{} {}",
+                i + 1,
+                categories.len(),
+                categories[i].to_uppercase()
+            ),
+            None => "All".to_string(),
+        };
+        let category_line = Line::styled(
+            "Category: ".to_string() + &category_text,
+            TODO_HEADER_STYLE.fg(if self.get_category().is_some() {
+                YELLOW
+            } else {
+                TEAL.c100
+            }),
+        )
+        .centered();
 
-        // Iterate through all elements in the `items` and stylize them.
+        // Sounds
         let items: Vec<ListItem> = self
-            .get_list()
-            .items()
+            .get_sound_manager()
+            .get_sound_list()
             .iter()
-            .enumerate()
-            .map(|(i, todo_item)| {
-                let color = alternate_colors(i);
-                let displayed_name = todo_item.name.clone();
-                let mut item = ListItem::from(displayed_name).bg(color);
-                if todo_item.done {
-                    item = item.add_modifier(Modifier::CROSSED_OUT);
+            .filter(|s| {
+                if let Some(c) = self.get_category() {
+                    s.category() == self.get_sound_manager().categories()[c]
+                } else {
+                    true
                 }
-                else if todo_item.priority>5 {
+            })
+            .enumerate()
+            .map(|(i, s)| {
+                let color = alternate_colors(i);
+                let displayed_name = if self.get_category().is_none() {
+                    format!("[{}] {}", s.category().to_uppercase(), s.name())
+                } else {
+                    s.name().to_string()
+                };
+                let mut item = ListItem::from(displayed_name).bg(color);
+                if self.get_sound_manager().is_sound_playing(s.path()) {
                     item = item.add_modifier(Modifier::BOLD).fg(AMBER.c100);
                 }
                 item
             })
             .collect();
 
-        let mut selected_style = SELECTED_STYLE;
-        let mut symbol = " => ";
-        if self.is_edit_mode() {
-            symbol = "===>";
-            selected_style=EDIT_STYLE;//.add_modifier(Modifier::REVERSED);
-        };
+        //Render
+        let block = Block::new()
+            .title(Line::raw("Sounds List").centered())
+            .borders(Borders::TOP)
+            .border_set(symbols::border::EMPTY)
+            .border_style(TODO_HEADER_STYLE)
+            .bg(TEAL.c800);
+
+        let [cat_layout, list_layout] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block.inner(area));
+
+        let selected_style = SELECTED_STYLE;
+        let symbol = " => ";
 
         let list = List::new(items)
-            .block(block)
             .highlight_style(selected_style)
             .highlight_symbol(symbol)
             .highlight_spacing(HighlightSpacing::Always);
 
-        StatefulWidget::render(list, area, buf, &mut self.get_state());
+        block.render(area, buf);
+        Paragraph::new(category_line).render(cat_layout, buf);
+        StatefulWidget::render(list, list_layout, buf, &mut self.get_state());
     }
 
-    //Renders selected task (right)
-    fn render_selected_item(&self, area: Rect, buf: &mut Buffer) {
-        let mut text: Vec<Line<'_>> = vec![];
-        let border_style = if self.is_edit_mode() { EDIT_STYLE } else { TODO_HEADER_STYLE };
-
-        match &self.get_selected() {
-            Some(i) => {
-                let task = self.get_list().task(*i);
-                let style = if self.is_edit_mode() { EDIT_VALUE_STYLE } else { TEXT_STYLE };
-
-                let mut name_line = vec!["Name : ".red()];
-
-                let mut priority_line = vec!["Priority : ".red()];
-
-                let state_line = vec![
-                    "Done : ".red(),
-                    Span::styled(format!("{}", task.done), TEXT_STYLE),
-                ];
-
-                if self.is_edit_mode() {
-                    name_line.push(Span::styled(self.get_edit_name(), style));
-                    priority_line.push(Span::styled(format!("{}", self.get_edit_priority()), style));
-                    name_line.push("_".fg(EDIT_VALUE_COLOR).add_modifier(Modifier::BOLD));
-                    priority_line.push(" (-/+)".fg(EDIT_VALUE_COLOR).bold());
-                } else {
-                    name_line.push(Span::styled(&task.name, style));
-                    priority_line.push(Span::styled(format!("{}", task.priority), TEXT_STYLE));
-                }
-
-                text.push(Line::from(name_line));
-                text.push(Line::from(priority_line));
-                text.push(Line::from(state_line));
-            }
-            None => {
-                text.push(Line::styled("Select a task", Style::new().gray().italic()));
-            }
-        }
-
-        // We show the list item's info under the list in this paragraph
+    fn render_current_sounds(&self, area: Rect, buf: &mut Buffer) {
         let block = Block::new()
-            .title(Line::raw("Task Information").centered())
-            .borders(Borders::all())
-            .border_set(symbols::border::EMPTY)
-            .border_style(border_style)
-            .bg(NORMAL_ROW_BG)
-            .padding(Padding::horizontal(1));
+            .title(Line::styled("Mixer",TODO_HEADER_STYLE).centered())
+            .borders(Borders::LEFT)
+            .border_set(symbols::border::PROPORTIONAL_TALL)
+            .border_style(MIXER_BORDERS_STYLE)
+            .bg(NORMAL_ROW_BG);
 
-        // We can now render the item info
-        Paragraph::new(text)
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .render(area, buf);
-    }*/
+        let sounds = self.get_sound_manager().playing_sounds();
+        let mut constr: Vec<Constraint> = vec![];
+        for _i in 0..sounds.len() {
+            constr.push(Constraint::Length(1));
+            constr.push(Constraint::Length(1));
+            constr.push(Constraint::Length(1));
+        }
+        constr.push(Constraint::Fill(1));
+
+        let layouts = Layout::vertical(constr).split(block.inner(area));
+
+        block.render(area, buf);
+
+        sounds.iter().enumerate().for_each(|(i, (p, _))| {
+            let path = p.as_str();
+            if !self.get_sound_manager().is_sound_playing(path) {
+                return;
+            }
+
+            let volume = match self.get_sound_manager().get_sound_by_path(path) {
+                Some(sound) => sound.volume(),
+                None => 0.0,
+            };
+
+            Paragraph::new(path)
+                .wrap(Wrap { trim: false })
+                .render(layouts[3 * i], buf);
+
+            LineGauge::default()
+                .filled_style(Style::default().fg(TEAL.c100))
+                .unfilled_style(Style::default().fg(TEAL.c800))
+                .ratio(volume.into())
+                .line_set(symbols::line::THICK)
+                .render(layouts[3 * i + 1], buf);
+        });
+    }
 }
 
 //Renders whole app
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let footer_length = if true {3} else {2};
+        let footer_length = if true { 3 } else { 2 };
         let [header_area, main_area, footer_area] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Fill(1),
@@ -164,12 +198,13 @@ impl Widget for &mut App {
         ])
         .areas(area);
 
-        let info_weight = if true {2} else {1};
         let [list_area, item_area] =
-            Layout::horizontal([Constraint::Fill(3-info_weight), Constraint::Fill(info_weight)]).areas(main_area);
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(main_area);
 
-        App::render_header(header_area, buf);
+        self.render_header(header_area, buf);
         self.render_footer(footer_area, buf);
+        self.render_list(list_area, buf);
+        self.render_current_sounds(item_area, buf);
     }
 }
 
