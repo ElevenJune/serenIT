@@ -20,7 +20,6 @@ fn main() -> Result<()> {
 
 //Todo
 // - put sounds inside the exe
-// - refactor ui in a seperate file
 // - tab widget
 // - Multiple config files to choose from
 // - switch the volume directly in the mixer

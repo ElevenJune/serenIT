@@ -87,7 +87,7 @@ impl SoundManager {
         self.available_sounds[index].path()
     }
 
-    pub fn get_sound_path_by_index_and_category(&self, index: usize, category_index : Option<usize>) -> &str {
+    pub fn get_sound_path_by_index_and_category(&self, index: usize, category_index : Option<usize>) -> Option<&str> {
         let cat_index = self.available_sounds
         .iter()
         .enumerate()
@@ -98,10 +98,7 @@ impl SoundManager {
             }
         });
 
-        match cat_index {
-            Some((i,_s)) => self.available_sounds[i+index].path(),
-            None => ""
-        }
+        cat_index.and_then(|(i,_)| Some(self.available_sounds[i+index].path()))
     }
 
     pub fn get_sound_by_path(&self, path: &str) -> Option<&Sound> {
