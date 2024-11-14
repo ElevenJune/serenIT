@@ -3,11 +3,11 @@ pub struct Sound {
     name: String,
     path: String,
     category: String,
-    volume: f32,
+    volume: f32
 }
 
 impl Sound {
-    pub fn new(name: &str, path: &str, category: &str, volume: f32) -> Self {
+    pub fn new(name: &str, path: &str, category: &str, volume: f32, ) -> Self {
         Sound {
             name: name.to_string(),
             path: path.to_string(),

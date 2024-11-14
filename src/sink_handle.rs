@@ -3,6 +3,7 @@ use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
 
 use std::fs::File;
 use std::io::BufReader;
+use std::io::Cursor;
 
 pub struct SinkHandle {
     _stream: OutputStream,
@@ -33,6 +34,12 @@ impl SinkHandle {
 
     pub fn is_paused(&self) -> bool {
         self.sink.is_paused()
+    }
+
+    pub fn play_raw<'a>(&mut self, data: std::io::Cursor<&'static [u8]>) {
+        self.clear_if_playing();
+        let source = Decoder::new(Cursor::new(data.into_inner())).unwrap();
+        self.sink.append(source.repeat_infinite());
     }
 
 

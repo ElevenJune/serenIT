@@ -8,6 +8,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 use thiserror::Error;
 use std::path::Path;
+use std::include_bytes;
+use std::io::Cursor;
 
 const MAX_SOUNDS: usize = 8;
 
@@ -269,7 +271,8 @@ impl SoundManager {
 
         let sink = &mut self.sinks[sink_index];
         sink.set_volume(volume);
-        sink.set_source(path);
+        //sink.set_source(path);
+        sink.play_raw(SOUNDS.iter().find(|(p,_)| p == path).unwrap().1.clone());
         sink.play();
     }
 
@@ -335,88 +338,7 @@ impl SoundManager {
 
     fn load_available_sounds(&mut self) {
         self.available_sounds.clear();
-        let params: Vec<&str> = vec![
-            // sounds/
-            "./sounds/animals/birds.mp3",
-            "./sounds/animals/cat-purring.mp3",
-            "./sounds/animals/crickets.mp3",
-            "./sounds/animals/crows.mp3",
-            "./sounds/animals/dog-barking.mp3",
-            "./sounds/animals/frog.mp3",
-            "./sounds/animals/horse-galopp.mp3",
-            "./sounds/animals/owl.mp3",
-            "./sounds/animals/seagulls.mp3",
-            "./sounds/animals/whale.mp3",
-            "./sounds/animals/wolf.mp3",
-            "./sounds/binaural/binaural-alpha.wav",
-            "./sounds/binaural/binaural-beta.wav",
-            "./sounds/binaural/binaural-delta.wav",
-            "./sounds/binaural/binaural-gamma.wav",
-            "./sounds/binaural/binaural-theta.wav",
-            "./sounds/nature/campfire.mp3",
-            "./sounds/nature/droplets.mp3",
-            "./sounds/nature/jungle.mp3",
-            "./sounds/nature/river.mp3",
-            "./sounds/nature/walk-in-snow.mp3",
-            "./sounds/nature/walk-on-leaves.mp3",
-            "./sounds/nature/waterfall.mp3",
-            "./sounds/nature/waves.mp3",
-            "./sounds/nature/wind.mp3",
-            "./sounds/nature/wind-in-trees.mp3",
-            "./sounds/noise/brown-noise.wav",
-            "./sounds/noise/pink-noise.wav",
-            "./sounds/noise/white-noise.wav",
-            "./sounds/places/airport.mp3",
-            "./sounds/places/cafe.mp3",
-            "./sounds/places/carousel.mp3",
-            "./sounds/places/church.mp3",
-            "./sounds/places/construction-site.mp3",
-            "./sounds/places/crowded-bar.mp3",
-            "./sounds/places/laboratory.mp3",
-            "./sounds/places/laundry-room.mp3",
-            "./sounds/places/night-village.mp3",
-            "./sounds/places/office.mp3",
-            "./sounds/places/subway-station.mp3",
-            "./sounds/places/supermarket.mp3",
-            "./sounds/places/temple.mp3",
-            "./sounds/places/underwater.mp3",
-            "./sounds/rain/heavy-rain.mp3",
-            "./sounds/rain/light-rain.mp3",
-            "./sounds/rain/rain-on-leaves.mp3",
-            "./sounds/rain/rain-on-tent.mp3",
-            "./sounds/rain/rain-on-umbrella.mp3",
-            "./sounds/rain/rain-on-window.mp3",
-            "./sounds/rain/thunder.mp3",
-            "./sounds/things/boiling-water.mp3",
-            "./sounds/things/bubbles.mp3",
-            "./sounds/things/ceiling-fan.mp3",
-            "./sounds/things/clock.mp3",
-            "./sounds/things/dryer.mp3",
-            "./sounds/things/keyboard.mp3",
-            "./sounds/things/morse-code.mp3",
-            "./sounds/things/paper.mp3",
-            "./sounds/things/slide-projector.mp3",
-            "./sounds/things/singing-bowl.mp3",
-            "./sounds/things/tuning-radio.mp3",
-            "./sounds/things/typewriter.mp3",
-            "./sounds/things/washing-machine.mp3",
-            "./sounds/things/wind-chimes.mp3",
-            "./sounds/transport/airplane.mp3",
-            "./sounds/transport/inside-a-train.mp3",
-            "./sounds/transport/rowing-boat.mp3",
-            "./sounds/transport/sailboat.mp3",
-            "./sounds/transport/submarine.mp3",
-            "./sounds/transport/train.mp3",
-            "./sounds/urban/ambulance-siren.mp3",
-            "./sounds/urban/busy-street.mp3",
-            "./sounds/urban/crowd.mp3",
-            "./sounds/urban/fireworks.mp3",
-            "./sounds/urban/highway.mp3",
-            "./sounds/urban/road.mp3",
-            "./sounds/urban/traffic.mp3",
-            "./sounds/alarm.mp3",
-        ];
-        params.iter().for_each(|path| {
+        SOUNDS.iter().for_each(|(path,_)| {
             let folders = path.split("/").collect::<Vec<&str>>();
             let filename = folders[folders.len() - 1];
             let category = folders[folders.len() - 2];
@@ -433,3 +355,83 @@ impl SoundManager {
         });
     }
 }
+
+pub const SOUNDS: [(&str, std::io::Cursor<&[u8]>); 77] = [
+    ("sounds/animals/birds.mp3", Cursor::new(include_bytes!("../sounds/animals/birds.mp3"))),
+    ("sounds/animals/crickets.mp3", Cursor::new(include_bytes!("../sounds/animals/crickets.mp3"))),
+    ("sounds/animals/crows.mp3", Cursor::new(include_bytes!("../sounds/animals/crows.mp3"))),
+    ("sounds/animals/dog-barking.mp3", Cursor::new(include_bytes!("../sounds/animals/dog-barking.mp3"))),
+    ("sounds/animals/frog.mp3", Cursor::new(include_bytes!("../sounds/animals/frog.mp3"))),
+    ("sounds/animals/horse-galopp.mp3", Cursor::new(include_bytes!("../sounds/animals/horse-galopp.mp3"))),
+    ("sounds/animals/owl.mp3", Cursor::new(include_bytes!("../sounds/animals/owl.mp3"))),
+    ("sounds/animals/seagulls.mp3", Cursor::new(include_bytes!("../sounds/animals/seagulls.mp3"))),
+    ("sounds/animals/whale.mp3", Cursor::new(include_bytes!("../sounds/animals/whale.mp3"))),
+    ("sounds/animals/wolf.mp3", Cursor::new(include_bytes!("../sounds/animals/wolf.mp3"))),
+    ("sounds/binaural/binaural-alpha.wav", Cursor::new(include_bytes!("../sounds/binaural/binaural-alpha.wav"))),
+    ("sounds/binaural/binaural-beta.wav", Cursor::new(include_bytes!("../sounds/binaural/binaural-beta.wav"))),
+    ("sounds/binaural/binaural-delta.wav", Cursor::new(include_bytes!("../sounds/binaural/binaural-delta.wav"))),
+    ("sounds/binaural/binaural-gamma.wav", Cursor::new(include_bytes!("../sounds/binaural/binaural-gamma.wav"))),
+    ("sounds/binaural/binaural-theta.wav", Cursor::new(include_bytes!("../sounds/binaural/binaural-theta.wav"))),
+    ("sounds/nature/campfire.mp3", Cursor::new(include_bytes!("../sounds/nature/campfire.mp3"))),
+    ("sounds/nature/droplets.mp3", Cursor::new(include_bytes!("../sounds/nature/droplets.mp3"))),
+    ("sounds/nature/jungle.mp3", Cursor::new(include_bytes!("../sounds/nature/jungle.mp3"))),
+    ("sounds/nature/river.mp3", Cursor::new(include_bytes!("../sounds/nature/river.mp3"))),
+    ("sounds/nature/walk-in-snow.mp3", Cursor::new(include_bytes!("../sounds/nature/walk-in-snow.mp3"))),
+    ("sounds/nature/walk-on-leaves.mp3", Cursor::new(include_bytes!("../sounds/nature/walk-on-leaves.mp3"))),
+    ("sounds/nature/waterfall.mp3", Cursor::new(include_bytes!("../sounds/nature/waterfall.mp3"))),
+    ("sounds/nature/waves.mp3", Cursor::new(include_bytes!("../sounds/nature/waves.mp3"))),
+    ("sounds/nature/wind.mp3", Cursor::new(include_bytes!("../sounds/nature/wind.mp3"))),
+    ("sounds/nature/wind-in-trees.mp3", Cursor::new(include_bytes!("../sounds/nature/wind-in-trees.mp3"))),
+    ("sounds/noise/brown-noise.wav", Cursor::new(include_bytes!("../sounds/noise/brown-noise.wav"))),
+    ("sounds/noise/pink-noise.wav", Cursor::new(include_bytes!("../sounds/noise/pink-noise.wav"))),
+    ("sounds/noise/white-noise.wav", Cursor::new(include_bytes!("../sounds/noise/white-noise.wav"))),
+    ("sounds/places/airport.mp3", Cursor::new(include_bytes!("../sounds/places/airport.mp3"))),
+    ("sounds/places/cafe.mp3", Cursor::new(include_bytes!("../sounds/places/cafe.mp3"))),
+    ("sounds/places/carousel.mp3", Cursor::new(include_bytes!("../sounds/places/carousel.mp3"))),
+    ("sounds/places/church.mp3", Cursor::new(include_bytes!("../sounds/places/church.mp3"))),
+    ("sounds/places/construction-site.mp3", Cursor::new(include_bytes!("../sounds/places/construction-site.mp3"))),
+    ("sounds/places/crowded-bar.mp3", Cursor::new(include_bytes!("../sounds/places/crowded-bar.mp3"))),
+    ("sounds/places/laboratory.mp3", Cursor::new(include_bytes!("../sounds/places/laboratory.mp3"))),
+    ("sounds/places/laundry-room.mp3", Cursor::new(include_bytes!("../sounds/places/laundry-room.mp3"))),
+    ("sounds/places/night-village.mp3", Cursor::new(include_bytes!("../sounds/places/night-village.mp3"))),
+    ("sounds/places/office.mp3", Cursor::new(include_bytes!("../sounds/places/office.mp3"))),
+    ("sounds/places/subway-station.mp3", Cursor::new(include_bytes!("../sounds/places/subway-station.mp3"))),
+    ("sounds/places/supermarket.mp3", Cursor::new(include_bytes!("../sounds/places/supermarket.mp3"))),
+    ("sounds/places/temple.mp3", Cursor::new(include_bytes!("../sounds/places/temple.mp3"))),
+    ("sounds/places/underwater.mp3", Cursor::new(include_bytes!("../sounds/places/underwater.mp3"))),
+    ("sounds/rain/heavy-rain.mp3", Cursor::new(include_bytes!("../sounds/rain/heavy-rain.mp3"))),
+    ("sounds/rain/light-rain.mp3", Cursor::new(include_bytes!("../sounds/rain/light-rain.mp3"))),
+    ("sounds/rain/rain-on-leaves.mp3", Cursor::new(include_bytes!("../sounds/rain/rain-on-leaves.mp3"))),
+    ("sounds/rain/rain-on-tent.mp3", Cursor::new(include_bytes!("../sounds/rain/rain-on-tent.mp3"))),
+    ("sounds/rain/rain-on-umbrella.mp3", Cursor::new(include_bytes!("../sounds/rain/rain-on-umbrella.mp3"))),
+    ("sounds/rain/rain-on-window.mp3", Cursor::new(include_bytes!("../sounds/rain/rain-on-window.mp3"))),
+    ("sounds/rain/thunder.mp3", Cursor::new(include_bytes!("../sounds/rain/thunder.mp3"))),
+    ("sounds/things/boiling-water.mp3", Cursor::new(include_bytes!("../sounds/things/boiling-water.mp3"))),
+    ("sounds/things/bubbles.mp3", Cursor::new(include_bytes!("../sounds/things/bubbles.mp3"))),
+    ("sounds/things/ceiling-fan.mp3", Cursor::new(include_bytes!("../sounds/things/ceiling-fan.mp3"))),
+    ("sounds/things/clock.mp3", Cursor::new(include_bytes!("../sounds/things/clock.mp3"))),
+    ("sounds/things/dryer.mp3", Cursor::new(include_bytes!("../sounds/things/dryer.mp3"))),
+    ("sounds/things/keyboard.mp3", Cursor::new(include_bytes!("../sounds/things/keyboard.mp3"))),
+    ("sounds/things/morse-code.mp3", Cursor::new(include_bytes!("../sounds/things/morse-code.mp3"))),
+    ("sounds/things/paper.mp3", Cursor::new(include_bytes!("../sounds/things/paper.mp3"))),
+    ("sounds/things/slide-projector.mp3", Cursor::new(include_bytes!("../sounds/things/slide-projector.mp3"))),
+    ("sounds/things/singing-bowl.mp3", Cursor::new(include_bytes!("../sounds/things/singing-bowl.mp3"))),
+    ("sounds/things/tuning-radio.mp3", Cursor::new(include_bytes!("../sounds/things/tuning-radio.mp3"))),
+    ("sounds/things/typewriter.mp3", Cursor::new(include_bytes!("../sounds/things/typewriter.mp3"))),
+    ("sounds/things/washing-machine.mp3", Cursor::new(include_bytes!("../sounds/things/washing-machine.mp3"))),
+    ("sounds/things/wind-chimes.mp3", Cursor::new(include_bytes!("../sounds/things/wind-chimes.mp3"))),
+    ("sounds/transport/airplane.mp3", Cursor::new(include_bytes!("../sounds/transport/airplane.mp3"))),
+    ("sounds/transport/inside-a-train.mp3", Cursor::new(include_bytes!("../sounds/transport/inside-a-train.mp3"))),
+    ("sounds/transport/rowing-boat.mp3", Cursor::new(include_bytes!("../sounds/transport/rowing-boat.mp3"))),
+    ("sounds/transport/sailboat.mp3", Cursor::new(include_bytes!("../sounds/transport/sailboat.mp3"))),
+    ("sounds/transport/submarine.mp3", Cursor::new(include_bytes!("../sounds/transport/submarine.mp3"))),
+    ("sounds/transport/train.mp3", Cursor::new(include_bytes!("../sounds/transport/train.mp3"))),
+    ("sounds/urban/ambulance-siren.mp3", Cursor::new(include_bytes!("../sounds/urban/ambulance-siren.mp3"))),
+    ("sounds/urban/busy-street.mp3", Cursor::new(include_bytes!("../sounds/urban/busy-street.mp3"))),
+    ("sounds/urban/crowd.mp3", Cursor::new(include_bytes!("../sounds/urban/crowd.mp3"))),
+    ("sounds/urban/fireworks.mp3", Cursor::new(include_bytes!("../sounds/urban/fireworks.mp3"))),
+    ("sounds/urban/highway.mp3", Cursor::new(include_bytes!("../sounds/urban/highway.mp3"))),
+    ("sounds/urban/road.mp3", Cursor::new(include_bytes!("../sounds/urban/road.mp3"))),
+    ("sounds/urban/traffic.mp3", Cursor::new(include_bytes!("../sounds/urban/traffic.mp3"))),
+    ("sounds/alarm.mp3", Cursor::new(include_bytes!("../sounds/alarm.mp3"))),
+];
