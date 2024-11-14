@@ -64,6 +64,22 @@ impl App {
         self.mixer_mode
     }
 
+    pub fn get_mixer_selected_path(&self) -> Option<String> {
+        self.mixer_index
+            .and_then(|index| self.sound_manager.playing_sounds().keys().nth(index))
+            .map(|path| path.to_string())
+    }
+
+    pub fn get_sound_selected_path(&self) -> Option<String> {
+        self.state
+            .selected()
+            .and_then(|index| {
+                self.sound_manager
+                    .get_sound_path_by_index_and_category(index, self.category)
+            })
+            .map(|path| path.to_string())
+    }
+
     //----Event handling
 
     fn handle_key(&mut self, key: KeyEvent) {
@@ -107,17 +123,6 @@ impl App {
         }
     }
 
-    fn set_mixer_index(&mut self, index: usize) {
-        let len = self.sound_manager.playing_sounds().len();
-        if len == 0 {
-            self.mixer_index = None;
-        } else if index >= len {
-            self.mixer_index = Some(len - 1);
-        } else {
-            self.mixer_index = Some(index);
-        }
-    }
-
     fn select_previous(&mut self) {
         if self.mixer_mode {
             match self.mixer_index {
@@ -133,7 +138,7 @@ impl App {
         }
     }
 
-    fn _select_first(&mut self) {
+    fn select_first(&mut self) {
         self.state.select_first();
     }
 
@@ -183,8 +188,10 @@ impl App {
                     Some(if backward { i - 1 } else { i + 1 })
                 }
             }
-        }
+        };
+        self.select_first();
     }
+    
     fn change_volume(&mut self, volume_offset: f32, master: bool) {
         if master {
             self.change_master_volume(volume_offset);
@@ -223,19 +230,14 @@ impl App {
         }
     }
 
-    fn get_mixer_selected_path(&self) -> Option<String> {
-        self.mixer_index
-            .and_then(|index| self.sound_manager.playing_sounds().keys().nth(index))
-            .map(|path| path.to_string())
-    }
-
-    fn get_sound_selected_path(&self) -> Option<String> {
-        self.state
-            .selected()
-            .and_then(|index| {
-                self.sound_manager
-                    .get_sound_path_by_index_and_category(index, self.category)
-            })
-            .map(|path| path.to_string())
+    fn set_mixer_index(&mut self, index: usize) {
+        let len = self.sound_manager.playing_sounds().len();
+        if len == 0 {
+            self.mixer_index = None;
+        } else if index >= len {
+            self.mixer_index = Some(len - 1);
+        } else {
+            self.mixer_index = Some(index);
+        }
     }
 }

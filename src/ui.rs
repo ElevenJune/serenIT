@@ -1,4 +1,4 @@
-use color_eyre::owo_colors::OwoColorize;
+//use color_eyre::owo_colors::OwoColorize;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -13,6 +13,7 @@ use ratatui::{
         Widget, Wrap,
     },
 };
+use cli_log::*;
 use std::sync::Arc;
 use crate::App;
 
@@ -29,7 +30,7 @@ const HEADER_STYLE: Style = Style::new()
     .add_modifier(Modifier::BOLD);
 const BORDER_STYLE_NONE: symbols::border::Set = symbols::border::EMPTY;
 const BORDER_STYLE_SELECTED: symbols::border::Set = symbols::border::PROPORTIONAL_TALL;
-const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).fg(FOCUS_COLOR).add_modifier(Modifier::BOLD);
+const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).fg(FOCUS_COLOR);
 const GAUGE_STYLE: Style = Style::new().fg(LIGHT_COLOR).bg(ALT_ROW_BG_COLOR);
 
 impl App {
@@ -60,7 +61,7 @@ impl App {
         };
         Paragraph::new(text)
             .left_aligned()
-            .bg(TEAL.c500)
+            .bg(FOCUS_UNSELECTED_COLOR)
             .fg(YELLOW)
             .bold()
             .render(area, buf);
@@ -109,13 +110,22 @@ impl App {
             .enumerate()
             .map(|(i, s)| {
                 let color = alternate_colors(i);
-                let displayed_name = if self.get_category().is_none() {
+                let playing = self.get_sound_manager().is_sound_playing(s.path());
+                let paused = self.get_sound_manager().is_sound_paused(s.path());
+
+                let mut displayed_name = if self.get_category().is_none() {
                     format!("[{}] {}", s.category().to_uppercase(), s.name())
                 } else {
                     s.name().to_string()
                 };
+                if paused{
+                    displayed_name = format!("{} 𝄽", displayed_name);
+                } else if playing {
+                    displayed_name = format!("{} ♪", displayed_name);
+                }
+
                 let mut item = ListItem::from(displayed_name).bg(color);
-                if self.get_sound_manager().is_sound_playing(s.path()) {
+                if playing {
                     item = item.fg(AMBER.c100);
                 }
                 item
@@ -133,10 +143,17 @@ impl App {
 
         let [cat_layout, list_layout] =
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block.inner(area));
-
+    
+        let selected_playing = match self.get_sound_selected_path(){
+            Some(path)=>self.get_sound_manager().is_sound_playing(&path),
+            None=>false,
+        };
+        info!("selected_playing: {}",selected_playing);
         let selected_style =
         if self.get_mixer_mode() {
             SELECTED_STYLE.fg(FOCUS_UNSELECTED_COLOR)
+        } else if selected_playing {
+            SELECTED_STYLE.add_modifier(Modifier::BOLD)
         } else {
             SELECTED_STYLE
         };

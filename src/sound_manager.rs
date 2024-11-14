@@ -83,11 +83,20 @@ impl SoundManager {
         self.sinks[*sink_index].is_playing()
     }
 
+    pub fn is_sound_paused(&self, path: &str) -> bool {
+        if !self.playing_sounds.contains_key(path) {
+            return false;
+        }
+        let sink_index = self.playing_sounds.get(path).unwrap();
+        self.sinks[*sink_index].is_paused()
+    }
+
     pub fn get_sound_path_by_index(&self, index: usize) -> &str {
         self.available_sounds[index].path()
     }
 
     pub fn get_sound_path_by_index_and_category(&self, index: usize, category_index : Option<usize>) -> Option<&str> {
+        //Find first element that matches the category
         let cat_index = self.available_sounds
         .iter()
         .enumerate()
@@ -97,8 +106,12 @@ impl SoundManager {
                 None => true
             }
         });
-
-        cat_index.and_then(|(i,_)| Some(self.available_sounds[i+index].path()))
+        //Get corresponding element of the category
+        cat_index.and_then(|(i,_)| {
+            if i+index >= self.available_sounds.len() {
+                return None;
+            }
+            return Some(self.available_sounds[i+index].path());})
     }
 
     pub fn get_sound_by_path(&self, path: &str) -> Option<&Sound> {
