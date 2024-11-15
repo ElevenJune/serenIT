@@ -192,20 +192,6 @@ impl SoundManager {
         });
     }
 
-    fn overwrite_last(&mut self, source: &String, volume: f32) {
-        let mut path = "".to_string();
-        let mut sink_index = MAX_SOUNDS;
-        self.playing_sounds.keys().for_each(|p| {
-            let index = self.playing_sounds.get(p).unwrap().clone();
-            if index == self.sinks.len() - 1 {
-                path = p.clone();
-                sink_index = index;
-            }
-        });
-        self.playing_sounds.remove(&path);
-        self.set_sink_source(sink_index, source, volume);
-    }
-
     pub fn save(&mut self) -> Result<(), FileError> {
         if self.config_path.is_empty() {
             return Err(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No config path found")));
@@ -232,6 +218,20 @@ impl SoundManager {
         self.sinks.iter_mut().for_each(|sink| {
             sink.play();
         });
+    }
+
+    fn overwrite_last(&mut self, source: &String, volume: f32) {
+        let mut path = "".to_string();
+        let mut sink_index = MAX_SOUNDS;
+        self.playing_sounds.keys().for_each(|p| {
+            let index = self.playing_sounds.get(p).unwrap().clone();
+            if index == self.sinks.len() - 1 {
+                path = p.clone();
+                sink_index = index;
+            }
+        });
+        self.playing_sounds.remove(&path);
+        self.set_sink_source(sink_index, source, volume);
     }
 
     fn demo(&mut self) {
@@ -271,9 +271,15 @@ impl SoundManager {
 
         let sink = &mut self.sinks[sink_index];
         sink.set_volume(volume);
-        //sink.set_source(path);
-        sink.play_raw(SOUNDS.iter().find(|(p,_)| p == path).unwrap().1.clone());
-        sink.play();
+        match SOUNDS.iter().find(|(p,_)| p == path) {
+            Some((_,data)) => {
+                sink.set_source(data.clone(),path);
+                sink.play();
+            }
+            None => {
+                error!("Sound {} not found", path);
+            }
+        }
     }
 
     fn load_presets(&mut self) -> Result<(), FileError> {
@@ -285,8 +291,7 @@ impl SoundManager {
 
         self.config_path = path.clone();
     
-        let res = self.read_from_file(&path);
-        res
+        self.read_from_file(&path)
     }
 
     fn save_to(&self, path: String) -> Result<(), FileError> {

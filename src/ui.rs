@@ -203,7 +203,12 @@ impl App {
             }
 
             let volume = match self.get_sound_manager().get_sound_by_path(path) {
-                Some(sound) => sound.volume(),
+                Some(sound) => {
+                    if self.get_sound_manager().is_sound_paused(path) {
+                        0.0
+                    } else {
+                        sound.volume()
+                    }},
                 None => 0.0,
             };
 

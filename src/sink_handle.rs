@@ -1,9 +1,7 @@
 use rodio::source::Source;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
-
-use std::fs::File;
-use std::io::BufReader;
 use std::io::Cursor;
+use cli_log::*;
 
 pub struct SinkHandle {
     _stream: OutputStream,
@@ -36,16 +34,13 @@ impl SinkHandle {
         self.sink.is_paused()
     }
 
-    pub fn play_raw<'a>(&mut self, data: std::io::Cursor<&'static [u8]>) {
+    pub fn set_source<'a>(&mut self, data: std::io::Cursor<&'static [u8]>, path: &str) {
         self.clear_if_playing();
-        let source = Decoder::new(Cursor::new(data.into_inner())).unwrap();
-        self.sink.append(source.repeat_infinite());
-    }
-
-
-    pub fn set_source(&mut self, source: &str) {
-        self.clear_if_playing();
-        self.add_to_queue(source);
+        let source = Decoder::new(Cursor::new(data.into_inner()));
+        match source {
+            Ok(source) => self.sink.append(source.repeat_infinite()),
+            Err(_) => warn!("Failed to create source from {}",path),
+        }
     }
 
     pub fn set_volume(&self, volume: f32) {
@@ -65,15 +60,23 @@ impl SinkHandle {
         self.sink.clear();
     }
 
-    fn add_to_queue(&mut self, source: &str) {
-        let file: BufReader<File> = BufReader::new(File::open(source).unwrap());
-        let buffer = Decoder::new(file).unwrap();
-        self.sink.append(buffer.repeat_infinite());
-    }
-
     fn clear_if_playing(&mut self) {
         if self.is_playing() {
             self.stop();
         }
     }
+
+    /*
+    //Previous implementation, reading from file
+    pub fn _set_source(&mut self, source: &str) {
+        self.clear_if_playing();
+        self.add_to_queue(source);
+    }
+
+    fn -add_to_queue(&mut self, source: &str) {
+        let file: BufReader<File> = BufReader::new(File::open(source).unwrap());
+        let buffer = Decoder::new(file).unwrap();
+        self.sink.append(buffer.repeat_infinite());
+    }
+    */
 }
