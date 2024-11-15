@@ -22,8 +22,8 @@ fn main() -> Result<()> {
 // - put sounds inside the exe
 // - tab widget
 // - Multiple config files to choose from
-// - switch the volume directly in the mixer
+// - switch the volume directly in the mixer DONE
 // - Favorite sounds category
-// - Better UI
+// - Better UI DONE
 // - small animation ?
 // - tab with logs
