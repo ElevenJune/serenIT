@@ -15,6 +15,7 @@ pub struct App {
     category: Option<usize>,
     mixer_index: Option<usize>,
     mixer_mode: bool,
+    sound_list_tab: bool
 }
 
 impl App {
@@ -36,6 +37,7 @@ impl App {
             category: None,
             mixer_index: None,
             mixer_mode: false,
+            sound_list_tab: true
         }
     }
 
@@ -62,6 +64,10 @@ impl App {
 
     pub fn get_mixer_mode(&self) -> bool {
         self.mixer_mode
+    }
+
+    pub fn get_sound_list_tab(&self) -> bool {
+        self.sound_list_tab
     }
 
     pub fn get_mixer_selected_path(&self) -> Option<String> {
@@ -95,6 +101,7 @@ impl App {
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
             KeyCode::Enter => self.toogle_selected_sound(),
             KeyCode::Tab => self.switch_menu(),
+            KeyCode::Char('a') => self.switch_sound_tab(),
             KeyCode::Char(' ') => self.sound_manager.toggle_pause_play(),
             KeyCode::Char('q') => self.exit = true,
             KeyCode::Char('s') => {
@@ -163,6 +170,10 @@ impl App {
                 Some(0)
             };
         }
+    }
+
+    pub fn switch_sound_tab(&mut self) {
+        self.sound_list_tab = !self.sound_list_tab;
     }
 
     fn arrow_pressed(&mut self, left: bool, ctrl_pressed: bool) {
