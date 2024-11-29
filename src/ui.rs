@@ -36,7 +36,7 @@ const NOT_SELECTED_TAB_STYLE: Style = Style::new().bg(ALT_ROW_BG_COLOR).fg(TEAL.
 const GAUGE_STYLE: Style = Style::new().fg(LIGHT_COLOR).bg(ALT_ROW_BG_COLOR);
 
 impl App {
-    //Renders header
+    /// Renders header
     fn render_header(&self, area: Rect, buf: &mut Buffer) {
         let text = format!(
             "SerenIT\n{}",
@@ -56,7 +56,7 @@ impl App {
         );
     }
 
-    //Renders footer
+    /// Renders footer
     fn render_footer(&self, area: Rect, buf: &mut Buffer) {
         let text = if !self.get_mixer_mode() {
             " Tab : switch tab, 's' : save, 'q' : quit\n \
@@ -75,8 +75,8 @@ impl App {
             .render(area, buf);
     }
 
-    //renders tabs
-    fn render_tabs(&self, area: Rect, buf: &mut Buffer) -> Rect {
+    /// Renders tab widget and returns the area for the selected tab
+    fn render_sound_scene_tabs(&self, area: Rect, buf: &mut Buffer) -> Rect {
         let border_style = if self.get_mixer_mode() {
             BORDER_STYLE_NONE
         } else {
@@ -105,9 +105,9 @@ impl App {
         widget_layout
     }
 
-    //Renders left list
-    fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
-        //Category
+    /// Renders the sound collection tab
+    fn render_sound_collection_tab(&mut self, area: Rect, buf: &mut Buffer) {
+        //==Category
         let categories = self.get_sound_manager().categories();
         let mut category_text = match self.get_category() {
             Some(i) => format!(
@@ -131,11 +131,13 @@ impl App {
         )
         .left_aligned();
 
-        // Sounds
+
+        //==Sounds
         let items: Vec<ListItem> = self
             .get_sound_manager()
             .get_sound_list()
             .iter()
+            //Filter for selected category
             .filter(|s| {
                 if let Some(c) = self.get_category() {
                     s.category() == self.get_sound_manager().categories()[c]
@@ -144,61 +146,59 @@ impl App {
                 }
             })
             .enumerate()
+            //Generate ListItem for each sound
             .map(|(i, s)| {
                 let color = alternate_colors(i);
                 let playing = self.get_sound_manager().is_sound_playing(s.path());
                 let paused = self.get_sound_manager().is_sound_paused(s.path());
 
-                let mut displayed_name = if self.get_category().is_none() {
-                    format!("[{}] {}", s.category().to_uppercase(), s.name())
-                } else {
-                    s.name().to_string()
+                //Display category if no filter
+                let category_format = match self.get_category() {
+                    None => format!("[{}] {}", s.category().to_uppercase(), s.name()),
+                    _ => s.name().to_string()
                 };
-                if paused {
-                    displayed_name = format!("{} 𝄽", displayed_name);
-                } else if playing {
-                    displayed_name = format!("{} ♪", displayed_name);
-                }
 
-                let mut item = ListItem::from(displayed_name).bg(color);
-                if playing {
-                    item = item.fg(AMBER.c100);
-                } else {
-                    item = item.fg(LIGHT_COLOR);
-                }
-                item
+                //Add playing/paused symbol
+                let displayed_name = match (playing, paused) {
+                    (_, true) => format!("{} 𝄽", category_format),
+                    (true, _) => format!("{} ♪", category_format),
+                    _ => category_format,
+                };
+
+                //Create ListItem
+                ListItem::from(displayed_name)
+                .bg(color)
+                .fg(match playing{
+                    true => YELLOW,
+                    false => LIGHT_COLOR
+                })
             })
             .collect();
 
-        //Render
-        let border_style = if true {
-            BORDER_STYLE_NONE
-        } else {
-            BORDER_STYLE_SELECTED
-        };
+        //Design block
         let block = Block::new()
             .title(Line::raw("Sounds List").centered())
             .borders(Borders::ALL)
-            .border_set(border_style)
+            .border_set(BORDER_STYLE_NONE)
             .border_style(HEADER_STYLE)
             .bg(ALT_ROW_BG_COLOR);
 
+        //Split area for category and list
         let [cat_layout, list_layout] =
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block.inner(area));
 
-        let selected_playing = match self.get_sound_selected_path() {
-            Some(path) => self.get_sound_manager().is_sound_playing(&path),
-            None => false,
-        };
-        info!("selected_playing: {}", selected_playing);
-        let selected_style = if self.get_mixer_mode() {
-            SELECTED_STYLE.fg(FOCUS_UNSELECTED_COLOR)
-        } else if selected_playing {
-            SELECTED_STYLE.add_modifier(Modifier::BOLD)
-        } else {
-            SELECTED_STYLE
+
+        //Design selected item
+        let selected_playing = self.get_sound_selected_path()
+        .map_or(false, |path| self.get_sound_manager().is_sound_playing(&path));
+
+        let selected_style = match (self.get_mixer_mode(), selected_playing) {
+            (true, _) => SELECTED_STYLE.fg(FOCUS_UNSELECTED_COLOR),
+            (_, true) => SELECTED_STYLE.add_modifier(Modifier::BOLD),
+            _ => SELECTED_STYLE,
         };
 
+        //Render block, list, and category
         let list = List::new(items)
             .highlight_style(selected_style)
             .highlight_symbol(" =>")
@@ -206,8 +206,60 @@ impl App {
 
         block.render(area, buf);
         Paragraph::new(category_line).render(cat_layout, buf);
-        StatefulWidget::render(list, list_layout, buf, &mut self.get_state());
+        StatefulWidget::render(list, list_layout, buf, &mut self.get_sound_list_state());
     }
+
+
+    /// Renders the scene collection tab
+    fn render_scene_collection_tab(&mut self, area: Rect, buf: &mut Buffer) {
+        //==Scenes
+        let items: Vec<ListItem> = self
+            .get_sound_manager()
+            .get_scene_collection()
+            .iter()
+            .enumerate()
+            //Generate ListItem for each sound
+            .map(|(i, s)| {
+                let name = s.name.to_string();
+                let is_playing = false;
+
+                //Create ListItem
+                ListItem::from(name)
+                .bg(alternate_colors(i))
+                .fg(match is_playing{
+                    true => YELLOW,
+                    false => LIGHT_COLOR
+                })
+            })
+            .collect();
+
+        //Design block
+        let block = Block::new()
+            .title(Line::raw("Scene List").centered())
+            .borders(Borders::ALL)
+            .border_set(BORDER_STYLE_NONE)
+            .border_style(HEADER_STYLE)
+            .bg(ALT_ROW_BG_COLOR);
+
+        //Design selected item
+        let selected_playing = self.get_sound_selected_path()
+        .map_or(false, |path| self.get_sound_manager().is_sound_playing(&path));
+
+        let selected_style = match (self.get_mixer_mode(), selected_playing) {
+            (true, _) => SELECTED_STYLE.fg(FOCUS_UNSELECTED_COLOR),
+            (_, true) => SELECTED_STYLE.add_modifier(Modifier::BOLD),
+            _ => SELECTED_STYLE,
+        };
+
+        //Render block, list, and category
+        let list = List::new(items)
+            .highlight_style(selected_style)
+            .highlight_symbol(" =>")
+            .highlight_spacing(HighlightSpacing::Always)
+            .block(block);
+        StatefulWidget::render(list, area, buf, &mut self.get_scene_list_state());
+    }
+
 
     //Renders right list
     fn render_current_sounds(&self, area: Rect, buf: &mut Buffer) {
@@ -298,12 +350,12 @@ impl Widget for &mut App {
 
         self.render_header(header_area, buf);
         self.render_footer(footer_area, buf);
-        let inner_tab_area = self.render_tabs(list_area, buf);
+        let inner_tab_area = self.render_sound_scene_tabs(list_area, buf);
         self.render_current_sounds(mixer_area, buf);
         if self.get_sound_list_tab() {
-            self.render_list(inner_tab_area, buf);
+            self.render_sound_collection_tab(inner_tab_area, buf);
         } else {
-            //self.render_list(inner_tab_area, buf);
+            self.render_scene_collection_tab(inner_tab_area, buf);
         }
     }
 }

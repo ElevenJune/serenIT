@@ -15,18 +15,29 @@ const MAX_SOUNDS: usize = 8;
 
 pub struct SoundManager {
     available_sounds: Vec<Sound>,
+    categories: Vec<String>,
     sinks: Vec<SinkHandle>,
     playing_sounds: HashMap<String, usize>,
+    scenes: Vec<SceneData>,
     config_path: String,
-    categories: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+/// Represents the data of a scene
+/// A scene is a collection of ambiant sounds with their volume
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SceneData {
+    pub name: String,
+    sounds: Vec<SoundData>
+}
+
+/// Represents a sound data, its source path and volume
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SoundData {
     pub source: String,
     pub volume: f32,
 }
 
+/// Represents the possible errors of the SoundManager
 pub enum SoundManagerError {
     NoAvailableSound,
     AlreadyPlaying,
@@ -35,6 +46,7 @@ pub enum SoundManagerError {
     OtherError,
 }
 
+/// Represents the possible errors while serializing/deserializing a file
 #[derive(Debug, Error)]
 pub enum FileError {
     #[error("IO error: {0}")]
@@ -50,14 +62,15 @@ impl SoundManager {
             sinks.push(SinkHandle::new());
         }
         let mut sm = SoundManager {
-            sinks,
             available_sounds: vec![],
-            playing_sounds: HashMap::new(),
-            config_path: "".to_string(),
             categories: vec![],
+            sinks,
+            playing_sounds: HashMap::new(),
+            scenes: vec![],
+            config_path: "".to_string(),
         };
-        sm.load_available_sounds();
-        sm.load_presets().unwrap_or_else(|err| {
+        sm.load_sound_collection();
+        sm.load_scene_collection().unwrap_or_else(|err| {
             warn!("No presets found, {}. Loading default demo",err);
             sm.demo();
         });
@@ -95,6 +108,10 @@ impl SoundManager {
 
     pub fn get_sound_path_by_index(&self, index: usize) -> &str {
         self.available_sounds[index].path()
+    }
+
+    pub fn get_scene_collection(&self) -> &Vec<SceneData> {
+        &self.scenes
     }
 
     pub fn get_sound_path_by_index_and_category(&self, index: usize, category_index : Option<usize>) -> Option<&str> {
@@ -196,7 +213,7 @@ impl SoundManager {
         if self.config_path.is_empty() {
             return Err(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No config path found")));
         }
-        self.save_to(self.config_path.clone())
+        self.write_scene_collection_to(self.config_path.clone())
     }
 
     //===== Misc
@@ -282,7 +299,10 @@ impl SoundManager {
         }
     }
 
-    fn load_presets(&mut self) -> Result<(), FileError> {
+
+
+    //===== Serialization
+    fn load_scene_collection(&mut self) -> Result<(), FileError> {
         let home_dir = my_home().map_err(|e| FileError::IoError(std::io::Error::new(std::io::ErrorKind::Unsupported, e)))?;
         let path = home_dir.ok_or_else(|| FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")))?
         .to_str()
@@ -294,7 +314,32 @@ impl SoundManager {
         self.read_from_file(&path)
     }
 
-    fn save_to(&self, path: String) -> Result<(), FileError> {
+    fn read_from_file(&mut self, path: &str) -> Result<(), FileError> {
+        let mut file = File::open(path)?;
+        let mut buff = String::new();
+        file.read_to_string(&mut buff)?;
+
+        //Get all scenes
+        self.scenes = serde_json::from_str(&buff)?;
+
+        //Get first scene
+        let first = self.scenes.get(0).cloned()
+        .ok_or(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No config path found")))?;
+
+        for (i, s) in first.sounds.iter().enumerate() {
+            if s.source.len() > 0 {
+                info!("Loading from file: {}, with volume {}", s.source, s.volume);
+                self.available_sounds.iter_mut()
+                .find(|sound| sound.path() == s.source)
+                .map(|sound| sound.set_volume(s.volume));
+
+                self.set_sink_source(i, &s.source, s.volume);
+            }
+        }
+        Ok(())
+    }
+
+    fn write_scene_collection_to(&self, path: String) -> Result<(), FileError> {
         // Create/open the file
         let file_path = Path::new(&path);
         let parent_dir = file_path.parent().ok_or(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No parent directory found")))?;
@@ -313,7 +358,13 @@ impl SoundManager {
                 });
             }
             });
-        let serialized = serde_json::to_string(&config)?;
+
+        let mut preset_list:Vec<SceneData> = vec![];
+        preset_list.push(SceneData{
+            name: "default".to_string(),
+            sounds: config
+        });
+        let serialized = serde_json::to_string(&preset_list)?;
 
         info!("Saving to file: {}", serialized);
 
@@ -323,25 +374,12 @@ impl SoundManager {
         Ok(())
     }
 
-    fn read_from_file(&mut self, path: &str) -> Result<(), FileError> {
-        let mut file = File::open(path)?;
-        let mut buff = String::new();
-        file.read_to_string(&mut buff)?;
-        let config: Vec<SoundData> = serde_json::from_str(&buff)?;
-        for (i, s) in config.iter().enumerate() {
-            if s.source.len() > 0 {
-                info!("Loading from file: {}, with volume {}", s.source, s.volume);
-                self.available_sounds.iter_mut()
-                .find(|sound| sound.path() == s.source)
-                .map(|sound| sound.set_volume(s.volume));
 
-                self.set_sink_source(i, &s.source, s.volume);
-            }
-        }
-        Ok(())
-    }
 
-    fn load_available_sounds(&mut self) {
+
+    //====== Sounds initialization
+    /// Load the sound collection from the SOUNDS array
+    fn load_sound_collection(&mut self) {
         self.available_sounds.clear();
         SOUNDS.iter().for_each(|(path,_)| {
             let folders = path.split("/").collect::<Vec<&str>>();

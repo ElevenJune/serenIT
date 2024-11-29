@@ -9,13 +9,17 @@ use cli_log::*;
 use color_eyre::Result;
 
 pub struct App {
-    exit: bool,
-    state: ListState,
     sound_manager: SoundManager,
+    exit: bool,
+    //Sound tab
+    sound_list_tab: bool,
     category: Option<usize>,
+    sound_state: ListState,
+    //Scene tab
+    scene_state: ListState,
+    //Mixer
     mixer_index: Option<usize>,
     mixer_mode: bool,
-    sound_list_tab: bool
 }
 
 impl App {
@@ -32,7 +36,8 @@ impl App {
     pub fn new(sound_manager: SoundManager) -> Self {
         App {
             exit: false,
-            state: ListState::default(),
+            sound_state: ListState::default(),
+            scene_state: ListState::default(),
             sound_manager,
             category: None,
             mixer_index: None,
@@ -42,12 +47,16 @@ impl App {
     }
 
     //----Getters
-    pub fn get_state(&mut self) -> &mut ListState {
-        &mut self.state
+    pub fn get_sound_list_state(&mut self) -> &mut ListState {
+        &mut self.sound_state
+    }
+
+    pub fn get_scene_list_state(&mut self) -> &mut ListState {
+        &mut self.scene_state
     }
 
     pub fn get_selected(&self) -> Option<usize> {
-        self.state.selected()
+        self.sound_state.selected()
     }
 
     pub fn get_category(&self) -> Option<usize> {
@@ -77,7 +86,7 @@ impl App {
     }
 
     pub fn get_sound_selected_path(&self) -> Option<String> {
-        self.state
+        self.sound_state
             .selected()
             .and_then(|index| {
                 self.sound_manager
@@ -101,7 +110,7 @@ impl App {
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
             KeyCode::Enter => self.toogle_selected_sound(),
             KeyCode::Tab => self.switch_menu(),
-            KeyCode::Char('a') => self.switch_sound_tab(),
+            KeyCode::Char('a') => self.switch_input_tab(),
             KeyCode::Char(' ') => self.sound_manager.toggle_pause_play(),
             KeyCode::Char('q') => self.exit = true,
             KeyCode::Char('s') => {
@@ -112,51 +121,64 @@ impl App {
     }
 
     fn _select_none(&mut self) {
-        self.state.select(None);
+        self.sound_state.select(None);
     }
 
     fn select_next(&mut self) {
         if self.mixer_mode {
-            match self.mixer_index {
-                Some(index) => {
-                    self.set_mixer_index(index + 1);
-                }
-                None => {
-                    self.mixer_index = Some(0);
-                }
-            }
+            self.mixer_index = self.mixer_index.map_or(Some(0),
+             |i| {
+                let len = self.sound_manager.playing_sounds().len();
+                if i >= len-1 {Some(len-1)}
+                else {Some(i + 1)}
+                });
         } else {
-            self.state.select_next();
+            match self.sound_list_tab {
+                true => self.sound_state.select_next(),
+                false => self.scene_state.select_next()
+            }
         }
     }
 
     fn select_previous(&mut self) {
         if self.mixer_mode {
-            match self.mixer_index {
-                Some(index) => {
-                    self.set_mixer_index(index.checked_sub(1).unwrap_or(0));
-                }
-                None => {
-                    self.mixer_index = Some(0);
-                }
-            }
+            self.mixer_index = self.mixer_index.map_or(Some(0),
+            |i| i.checked_sub(1).unwrap_or(0).into());
         } else {
-            self.state.select_previous();
+            match self.sound_list_tab {
+                true => self.sound_state.select_previous(),
+                false => self.scene_state.select_previous()
+            }
         }
     }
 
     fn select_first(&mut self) {
-        self.state.select_first();
+        match self.sound_list_tab {
+            true => self.sound_state.select_first(),
+            false => self.scene_state.select_first()
+        }
     }
 
     fn select_last(&mut self) {
-        if !self.mixer_mode {
-            if let Some(index) = self.sound_manager.get_sound_list().len().checked_sub(1) {
-                self.state.select(Some(index));
+        match self.mixer_mode {
+            false => {
+                let list_state = match self.sound_list_tab {
+                    true => &mut self.sound_state,
+                    false => &mut self.scene_state
+                };
+                let last_index = match self.sound_list_tab{
+                    true => self.sound_manager.get_sound_list().len().checked_sub(1),
+                    false => self.sound_manager.get_scene_collection().len().checked_sub(1)
+                };
+                if let Some(index) = last_index {
+                    list_state.select(Some(index));
+                }
             }
-        } else {
-            if let Some(index) = self.sound_manager.playing_sounds().len().checked_sub(1) {
-                self.mixer_index = Some(index);
+            true => {
+                let last_index = self.sound_manager.playing_sounds().len().checked_sub(1);
+                if let Some(index) = last_index {
+                    self.mixer_index = Some(index);
+                }
             }
         }
     }
@@ -172,7 +194,7 @@ impl App {
         }
     }
 
-    pub fn switch_sound_tab(&mut self) {
+    pub fn switch_input_tab(&mut self) {
         self.sound_list_tab = !self.sound_list_tab;
     }
 
