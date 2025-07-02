@@ -65,13 +65,13 @@ impl App {
     /// Renders footer
     fn render_footer(&self, area: Rect, buf: &mut Buffer) {
         let text = if !self.get_mixer_mode() {
-            " Tab : switch tab, 's' : save, 'q' : quit, 'm' : switch to mixer\n \
-            -/+ : select category, ctrl & -/+ : adjust the master volume\n \
-            Enter : add/remove the selected sound, Space : pause/play"
+            " Tab : switch between sound/scenes, 's' : save, 'q' : quit, 'm' : switch to mixer\n \
+            ←→ : select category, ctrl & ←→ : adjust the master volume\n \
+            Enter : add/remove the selected sound, Space : pause/play, 'n' : create scene"
         } else {
-            " Tab : switch tab, 's' : save, 'q' : quit\n \
-            -/+ : adjust sound volume, ctrl & -/+ : adjust the master volume\n \
-            Space : pause/play"
+            " 'm' : go back to calaog, 's' : save, 'q' : quit\n \
+            ←→ : adjust sound volume, ctrl & ←→ : adjust the master volume\n \
+            Space : pause/play selected sound"
         };
         Paragraph::new(text)
             .left_aligned()

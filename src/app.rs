@@ -205,7 +205,9 @@ impl App {
     }
 
     pub fn switch_input_tab(&mut self) {
-        self.sound_list_tab = !self.sound_list_tab;
+        if !self.get_mixer_mode() {
+            self.sound_list_tab = !self.sound_list_tab;
+        }
     }
 
     fn arrow_pressed(&mut self, left: bool, ctrl_pressed: bool) {
