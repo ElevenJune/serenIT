@@ -1,6 +1,5 @@
 //use color_eyre::owo_colors::OwoColorize;
 use crate::App;
-use cli_log::*;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -66,7 +65,7 @@ impl App {
     /// Renders footer
     fn render_footer(&self, area: Rect, buf: &mut Buffer) {
         let text = if !self.get_mixer_mode() {
-            " Tab : switch tab, 's' : save, 'q' : quit\n \
+            " Tab : switch tab, 's' : save, 'q' : quit, 'm' : switch to mixer\n \
             -/+ : select category, ctrl & -/+ : adjust the master volume\n \
             Enter : add/remove the selected sound, Space : pause/play"
         } else {

@@ -4,7 +4,6 @@ use cli_log::*;
 use homedir::my_home;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::f32::consts::E;
 use std::fs::File;
 use std::io::{Read, Write};
 use thiserror::Error;

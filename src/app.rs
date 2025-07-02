@@ -287,7 +287,7 @@ impl App {
         }
     }
 
-    fn set_mixer_index(&mut self, index: usize) {
+    fn _set_mixer_index(&mut self, index: usize) {
         let len = self.sound_manager.playing_sounds().len();
         if len == 0 {
             self.mixer_index = None;
