@@ -34,7 +34,7 @@ impl App {
     }
 
     pub fn new(sound_manager: SoundManager) -> Self {
-        App {
+        let mut app =App {
             exit: false,
             sound_state: ListState::default(),
             scene_state: ListState::default(),
@@ -43,7 +43,9 @@ impl App {
             mixer_index: None,
             mixer_mode: false,
             sound_list_tab: true
-        }
+        };
+        app.scene_state.select(Some(app.sound_manager.get_current_scene_index()));
+        app
     }
 
     //----Getters
@@ -95,6 +97,11 @@ impl App {
             .map(|path| path.to_string())
     }
 
+    pub fn get_scene_selected_index(&self) -> Option<usize> {
+        self.scene_state
+            .selected()
+    }
+
     //----Event handling
 
     fn handle_key(&mut self, key: KeyEvent) {
@@ -103,19 +110,21 @@ impl App {
         }
         let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
+            //Navigation
             KeyCode::Char('h') | KeyCode::Left => self.arrow_pressed(true, ctrl_pressed),
             KeyCode::Char('i') | KeyCode::Right => self.arrow_pressed(false, ctrl_pressed),
             KeyCode::Char('j') | KeyCode::Down => self.select_next(),
             KeyCode::Char('k') | KeyCode::Up => self.select_previous(),
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
+            KeyCode::Tab => self.switch_input_tab(),
+            KeyCode::Char('m') => self.switch_menu(),
+            //Actions
             KeyCode::Enter => self.toogle_selected_sound(),
-            KeyCode::Tab => self.switch_menu(),
-            KeyCode::Char('a') => self.switch_input_tab(),
             KeyCode::Char(' ') => self.sound_manager.toggle_pause_play(),
+            KeyCode::Char('n') => self.sound_manager.create_empty_scene(),
+            KeyCode::Char('d') => self.delete_scene(),
             KeyCode::Char('q') => self.exit = true,
-            KeyCode::Char('s') => {
-                let _ = self.sound_manager.save();
-            }
+            KeyCode::Char('s') => {let _ = self.sound_manager.save();},
             _ => {}
         }
     }
@@ -129,7 +138,8 @@ impl App {
             self.mixer_index = self.mixer_index.map_or(Some(0),
              |i| {
                 let len = self.sound_manager.playing_sounds().len();
-                if i >= len-1 {Some(len-1)}
+                if len == 0 {None}
+                else if i >= len-1 {Some(len-1)}
                 else {Some(i + 1)}
                 });
         } else {
@@ -209,6 +219,12 @@ impl App {
         }
     }
 
+    fn delete_scene(&mut self){
+        if let Some(n) = self.scene_state.selected() {
+            self.sound_manager.delete_scene(n);
+        }
+    }
+
     fn switch_category(&mut self, backward: bool) {
         let categories = self.sound_manager.categories();
         let len = categories.len();
@@ -245,10 +261,18 @@ impl App {
 
     fn toogle_selected_sound(&mut self) {
         if !self.get_mixer_mode() {
-            if let Some(path) = self.get_sound_selected_path() {
-                info!("Toggling sound: {}", path);
-                let _ = self.sound_manager.toggle_sound(&path);
-                self.mixer_index = None;
+            if self.get_sound_list_tab(){
+                if let Some(path) = self.get_sound_selected_path() {
+                    info!("Toggling sound: {}", path);
+                    let _ = self.sound_manager.toggle_sound(&path);
+                    self.mixer_index = None;
+                }
+            }else{
+                if let Some(index) = self.get_scene_selected_index() {
+                    self.sound_manager.save_current_scene();
+                    let _ = self.sound_manager.play_scene(index);
+                    self.mixer_index = None;
+                }
             }
         } else {
             if let Some(path) = self.get_mixer_selected_path() {

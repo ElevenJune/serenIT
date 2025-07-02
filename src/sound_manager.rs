@@ -4,6 +4,7 @@ use cli_log::*;
 use homedir::my_home;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::f32::consts::E;
 use std::fs::File;
 use std::io::{Read, Write};
 use thiserror::Error;
@@ -19,6 +20,7 @@ pub struct SoundManager {
     sinks: Vec<SinkHandle>,
     playing_sounds: HashMap<String, usize>,
     scenes: Vec<SceneData>,
+    current_scene_index: usize,
     config_path: String,
 }
 
@@ -68,11 +70,13 @@ impl SoundManager {
             playing_sounds: HashMap::new(),
             scenes: vec![],
             config_path: "".to_string(),
+            current_scene_index: 0,
         };
         sm.load_sound_collection();
         sm.load_scene_collection().unwrap_or_else(|err| {
             warn!("No presets found, {}. Loading default demo",err);
-            sm.demo();
+            sm.create_empty_scene();
+            sm.current_scene_index = 0;
         });
         sm
     }
@@ -112,6 +116,10 @@ impl SoundManager {
 
     pub fn get_scene_collection(&self) -> &Vec<SceneData> {
         &self.scenes
+    }
+
+    pub fn get_current_scene_index(&self) -> usize {
+        self.current_scene_index
     }
 
     pub fn get_sound_path_by_index_and_category(&self, index: usize, category_index : Option<usize>) -> Option<&str> {
@@ -216,6 +224,65 @@ impl SoundManager {
         self.write_scene_collection_to(self.config_path.clone())
     }
 
+    pub fn play_scene(&mut self, scene_index: usize) -> Result<(), FileError> {
+        if scene_index >= self.scenes.len() {
+            return Err(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "Scene not found")));
+        }
+        
+        // Clear current playing sounds
+        self.playing_sounds.clear();
+        self.sinks.iter_mut().for_each(|sink| sink.stop());
+        self.current_scene_index = scene_index;
+
+        let sounds = self.scenes[scene_index].sounds.clone();
+        for (_i, sound_data) in sounds.iter().enumerate() {
+            if !sound_data.source.is_empty() {
+                info!("Playing sound {} with volume {}", sound_data.source, sound_data.volume);
+                let _ = self.add_sound(&sound_data.source);
+                let sound = self.get_sound_by_path(&sound_data.source).unwrap();
+                let current_volume = sound.volume();
+                self.adjust_sound_volume(&sound_data.source, sound_data.volume-current_volume);
+            }
+        }
+        info!("Scene {} played", scene_index);
+        Ok(())
+    }
+
+    pub fn create_empty_scene(&mut self) {
+        let mut scene_index = 0;
+        let mut new_scene = SceneData {
+            name: format!("Scene_{}", scene_index),
+            sounds: vec![],
+        };
+        let mut name_found = true;
+        while name_found {
+            name_found = false;
+            for scene in &self.scenes {
+                if scene.name == new_scene.name {
+                    name_found = true;
+                    new_scene.name = format!("Scene_{}", scene_index + 1);
+                    break;
+                }
+            }
+            scene_index += 1;
+        }
+        self.scenes.push(new_scene);
+    }
+
+    pub fn delete_scene(&mut self, scene_index:usize) {
+        let current_len = self.scenes.len();
+        if current_len <= 1 {return;}
+        self.scenes.remove(scene_index);
+        if self.current_scene_index == scene_index {
+            let new_index = if scene_index < current_len-1 { scene_index } else { current_len-1 };
+            let _ = self.play_scene(new_index);
+            self.pause_all();
+        } else {
+            self.current_scene_index = if self.current_scene_index >= scene_index {self.current_scene_index-1} else {self.current_scene_index};
+        }
+
+    }
+
     //===== Misc
     fn find_available(&self) -> Option<usize> {
         self.sinks
@@ -249,20 +316,6 @@ impl SoundManager {
         });
         self.playing_sounds.remove(&path);
         self.set_sink_source(sink_index, source, volume);
-    }
-
-    fn demo(&mut self) {
-        let params = vec![
-            ("waves.mp3", -0.3),
-            ("birds.mp3", -0.4),
-            ("wind-chimes.mp3", -0.6),
-            ("binaural-alpha.wav", -0.15),
-        ];
-        info!("Demo: {:?}", params);
-        params.iter().for_each(|(name, volume)| {
-            let _ = self.toggle_sound(name);
-            self.adjust_volume(name, *volume, false);
-        });
     }
 
     fn adjust_volume(&mut self, path: &str, volume_offset: f32, master:bool) {
@@ -299,6 +352,25 @@ impl SoundManager {
         }
     }
 
+    pub fn save_current_scene(&mut self){
+        let scene_index = self.current_scene_index;
+        if scene_index < self.scenes.len() {
+            let mut sounds:Vec<SoundData> = vec![];
+            self.playing_sounds.keys().for_each(|path| {
+                if let Some(sound) = self.get_sound_by_path(path) {
+                    sounds.push(SoundData {
+                        source: path.clone(),
+                        volume: sound.volume(),
+                    });
+                }
+            });
+            self.scenes[scene_index].sounds = sounds;
+            info!("Scene {} saved", scene_index);
+        } else {
+            error!("Scene index out of bounds");
+        }
+    }
+
 
 
     //===== Serialization
@@ -322,9 +394,14 @@ impl SoundManager {
         //Get all scenes
         self.scenes = serde_json::from_str(&buff)?;
 
+        if self.scenes.is_empty() {
+            self.create_empty_scene();
+        }
+        self.scenes.sort_by(|a, b| a.name.cmp(&b.name));
+
         //Get first scene
         let first = self.scenes.get(0).cloned()
-        .ok_or(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No config path found")))?;
+        .ok_or(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No scene found")))?;
 
         for (i, s) in first.sounds.iter().enumerate() {
             if s.source.len() > 0 {
@@ -336,10 +413,12 @@ impl SoundManager {
                 self.set_sink_source(i, &s.source, s.volume);
             }
         }
+        self.current_scene_index = 0;
+        self.pause_all();
         Ok(())
     }
 
-    fn write_scene_collection_to(&self, path: String) -> Result<(), FileError> {
+    fn write_scene_collection_to(&mut self, path: String) -> Result<(), FileError> {
         // Create/open the file
         let file_path = Path::new(&path);
         let parent_dir = file_path.parent().ok_or(FileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "No parent directory found")))?;
@@ -347,24 +426,8 @@ impl SoundManager {
         let mut f = File::create(path)?;
 
         // Serialize the struct
-        let mut config:Vec<SoundData> = vec![];
-        self.playing_sounds
-            .keys()
-            .for_each(|path| {
-                if let Some(sound) = self.get_sound_by_path(path){
-                config.push(SoundData {
-                    source: path.clone(),
-                    volume: sound.volume(),
-                });
-            }
-            });
-
-        let mut preset_list:Vec<SceneData> = vec![];
-        preset_list.push(SceneData{
-            name: "default".to_string(),
-            sounds: config
-        });
-        let serialized = serde_json::to_string(&preset_list)?;
+        self.save_current_scene();
+        let serialized = serde_json::to_string(&self.scenes)?;
 
         info!("Saving to file: {}", serialized);
 

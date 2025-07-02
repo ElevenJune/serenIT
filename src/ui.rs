@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 const LIGHT_COLOR: Color = TEAL.c100;
 const FOCUS_COLOR: Color = AMBER.c300;
+const PAUSED_COLOR: Color = AMBER.c500;
 const FOCUS_UNSELECTED_COLOR: Color = TEAL.c400;
 const NORMAL_ROW_BG: Color = TEAL.c900;
 const ALT_ROW_BG_COLOR: Color = TEAL.c800;
@@ -38,19 +39,25 @@ const GAUGE_STYLE: Style = Style::new().fg(LIGHT_COLOR).bg(ALT_ROW_BG_COLOR);
 impl App {
     /// Renders header
     fn render_header(&self, area: Rect, buf: &mut Buffer) {
-        let text = format!(
+        let mut text = format!("SerenIT\n");
+        let mut bg = TEAL.c500;
+        if self.get_sound_manager().is_paused() {
+            text+="[PAUSED]";
+            bg = PAUSED_COLOR;
+        }
+        /*let text = format!(
             "SerenIT\n{}",
             if self.get_sound_manager().is_paused() {
                 "[Paused]"
             } else {
                 ""
             }
-        );
+        );*/
         Arc::new(
             Paragraph::new(text)
                 .bold()
                 .centered()
-                .bg(TEAL.c500)
+                .bg(bg)
                 .fg(YELLOW)
                 .render(area, buf),
         );
@@ -93,7 +100,7 @@ impl App {
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block.inner(area));
         let selected_index = if self.get_sound_list_tab() { 0 } else { 1 };
 
-        Tabs::new(vec!["<Sounds>", "<Presets>"])
+        Tabs::new(vec!["<Sounds>", "<Scenes>"])
             .block(block)
             .style(NOT_SELECTED_TAB_STYLE)
             .highlight_style(SELECTED_TAB_STYLE)
@@ -221,7 +228,7 @@ impl App {
             //Generate ListItem for each sound
             .map(|(i, s)| {
                 let name = s.name.to_string();
-                let is_playing = false;
+                let is_playing = i==self.get_sound_manager().get_current_scene_index();
 
                 //Create ListItem
                 ListItem::from(name)
@@ -242,8 +249,8 @@ impl App {
             .bg(ALT_ROW_BG_COLOR);
 
         //Design selected item
-        let selected_playing = self.get_sound_selected_path()
-        .map_or(false, |path| self.get_sound_manager().is_sound_playing(&path));
+        let selected_playing = self.get_scene_selected_index()
+        .map_or(false, |index| self.get_sound_manager().get_current_scene_index() == index);
 
         let selected_style = match (self.get_mixer_mode(), selected_playing) {
             (true, _) => SELECTED_STYLE.fg(FOCUS_UNSELECTED_COLOR),
@@ -268,6 +275,7 @@ impl App {
         } else {
             BORDER_STYLE_SELECTED
         };
+
         let block = Block::new()
             .title(Line::styled("Mixer", HEADER_STYLE).centered())
             .borders(Borders::ALL)
@@ -295,13 +303,7 @@ impl App {
             }
 
             let volume = match self.get_sound_manager().get_sound_by_path(path) {
-                Some(sound) => {
-                    if self.get_sound_manager().is_sound_paused(path) {
-                        0.0
-                    } else {
-                        sound.volume()
-                    }
-                }
+                Some(sound) => sound.volume(),
                 None => 0.0,
             };
 
@@ -319,6 +321,9 @@ impl App {
             if !self.get_mixer_mode() && selected {
                 color = FOCUS_UNSELECTED_COLOR;
                 gauge_style = gauge_style.fg(FOCUS_UNSELECTED_COLOR);
+            }
+            if self.get_sound_manager().is_paused() {
+                gauge_style = GAUGE_STYLE.fg(PAUSED_COLOR);
             }
 
             Paragraph::new(path)
