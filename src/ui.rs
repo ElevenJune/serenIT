@@ -1,7 +1,8 @@
+//use color_eyre::owo_colors::OwoColorize;
+use crate::App;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
-    prelude::Span,
     style::{
         palette::tailwind::{AMBER, TEAL},
         Color, Modifier, Style, Stylize,
@@ -9,154 +10,338 @@ use ratatui::{
     symbols::{self},
     text::Line,
     widgets::{
-        Block, Borders, HighlightSpacing, List, ListItem, Padding, Paragraph,
-        StatefulWidget, Widget, Wrap,
-    }
+        Block, Borders, Gauge, HighlightSpacing, List, ListItem, Paragraph, StatefulWidget, Tabs,
+        Widget, Wrap,
+    },
 };
-use crate::App;
+use std::sync::Arc;
 
-
-const TODO_HEADER_STYLE: Style = Style::new().fg(TEAL.c100).bg(TEAL.c800);
+const LIGHT_COLOR: Color = TEAL.c100;
+const FOCUS_COLOR: Color = AMBER.c300;
+const PAUSED_COLOR: Color = AMBER.c500;
+const FOCUS_UNSELECTED_COLOR: Color = TEAL.c400;
 const NORMAL_ROW_BG: Color = TEAL.c900;
 const ALT_ROW_BG_COLOR: Color = TEAL.c800;
-const EDIT_ROW_COLOR: Color = AMBER.c700;
-const EDIT_VALUE_COLOR: Color = AMBER.c500;
-const EDIT_STYLE: Style = Style::new().bg(EDIT_ROW_COLOR).add_modifier(Modifier::BOLD).fg(AMBER.c100);
-const EDIT_VALUE_STYLE: Style = Style::new().bg(EDIT_VALUE_COLOR).add_modifier(Modifier::BOLD).fg(AMBER.c100);
-const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).add_modifier(Modifier::BOLD);
-const TEXT_FG_COLOR: Color = TEAL.c200;
-const TEXT_STYLE: Style = Style::new().fg(TEXT_FG_COLOR);
+const YELLOW: Color = AMBER.c100;
+
+const HEADER_STYLE: Style = Style::new()
+    .fg(LIGHT_COLOR)
+    .bg(ALT_ROW_BG_COLOR)
+    .add_modifier(Modifier::BOLD);
+const BORDER_STYLE_NONE: symbols::border::Set = symbols::border::EMPTY;
+const BORDER_STYLE_SELECTED: symbols::border::Set = symbols::border::PROPORTIONAL_TALL;
+const SELECTED_STYLE: Style = Style::new().bg(TEAL.c600).fg(FOCUS_COLOR);
+const SELECTED_TAB_STYLE: Style = Style::new().bg(ALT_ROW_BG_COLOR).fg(FOCUS_COLOR);
+const NOT_SELECTED_TAB_STYLE: Style = Style::new().bg(ALT_ROW_BG_COLOR).fg(TEAL.c600);
+const GAUGE_STYLE: Style = Style::new().fg(LIGHT_COLOR).bg(ALT_ROW_BG_COLOR);
 
 impl App {
+    /// Renders header
+    fn render_header(&self, area: Rect, buf: &mut Buffer) {
+        let mut text = format!("SerenIT\n");
+        let mut bg = TEAL.c500;
+        if self.get_sound_manager().is_paused() {
+            text+="[PAUSED]";
+            bg = PAUSED_COLOR;
+        }
+        /*let text = format!(
+            "SerenIT\n{}",
+            if self.get_sound_manager().is_paused() {
+                "[Paused]"
+            } else {
+                ""
+            }
+        );*/
+        Arc::new(
+            Paragraph::new(text)
+                .bold()
+                .centered()
+                .bg(bg)
+                .fg(YELLOW)
+                .render(area, buf),
+        );
+    }
 
-    //Renders header
-    fn render_header(area: Rect, buf: &mut Buffer) {
-        Paragraph::new("Todo List Application")
+    /// Renders footer
+    fn render_footer(&self, area: Rect, buf: &mut Buffer) {
+        let text = if !self.get_mixer_mode() {
+            " Tab : switch between sound/scenes, 's' : save, 'q' : quit, 'm' : switch to mixer\n \
+            ←→ : select category, ctrl & ←→ : adjust the master volume\n \
+            Enter : add/remove the selected sound, Space : pause/play, 'n' : create scene"
+        } else {
+            " 'm' : go back to calaog, 's' : save, 'q' : quit\n \
+            ←→ : adjust sound volume, ctrl & ←→ : adjust the master volume\n \
+            Space : pause/play selected sound"
+        };
+        Paragraph::new(text)
+            .left_aligned()
+            .bg(FOCUS_UNSELECTED_COLOR)
+            .fg(YELLOW)
             .bold()
-            .centered()
-            .bg(TEAL.c500)
             .render(area, buf);
     }
 
-    //Renders footer
-    fn render_footer(&self, area: Rect, buf: &mut Buffer) {
-        let text = if true {
-            "[Edit Mode]\nSave with Enter, Cancel with Esc\n-/+ to change priority, type to change name"
+    /// Renders tab widget and returns the area for the selected tab
+    fn render_sound_scene_tabs(&self, area: Rect, buf: &mut Buffer) -> Rect {
+        let border_style = if self.get_mixer_mode() {
+            BORDER_STYLE_NONE
         } else {
-            "Use ↓↑ to move, ← to unselect, → to change status\n'a' to add a task. 'Delete' to remove a task"
+            BORDER_STYLE_SELECTED
         };
-        Paragraph::new(text)
-        .centered()
-        .bg(AMBER.c100)
-        .fg(EDIT_ROW_COLOR)
-        .bold()
-        .render(area, buf);
+        let block = Block::new()
+        .title(Line::styled("Input", HEADER_STYLE).centered())
+        .borders(Borders::ALL)
+        .border_set(border_style)
+        .border_style(HEADER_STYLE)
+        .bg(NORMAL_ROW_BG);
+
+        let [_, widget_layout] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block.inner(area));
+        let selected_index = if self.get_sound_list_tab() { 0 } else { 1 };
+
+        Tabs::new(vec!["<Sounds>", "<Scenes>"])
+            .block(block)
+            .style(NOT_SELECTED_TAB_STYLE)
+            .highlight_style(SELECTED_TAB_STYLE)
+            .select(selected_index)
+            .divider("▌")
+            .padding(" ", " ")
+            .render(area,buf);
+
+        widget_layout
     }
 
-    //Renders left list
-    /*fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
-        let block = Block::new()
-            .title(Line::raw("Task List").centered())
-            .borders(Borders::TOP)
-            .border_set(symbols::border::EMPTY)
-            .border_style(TODO_HEADER_STYLE)
-            .bg(NORMAL_ROW_BG);
+    /// Renders the sound collection tab
+    fn render_sound_collection_tab(&mut self, area: Rect, buf: &mut Buffer) {
+        //==Category
+        let categories = self.get_sound_manager().categories();
+        let mut category_text = match self.get_category() {
+            Some(i) => format!(
+                "{} {}/{}",
+                categories[i].to_uppercase(),
+                i + 1,
+                categories.len()
+            ),
+            None => "All".to_string(),
+        };
+        if !self.get_mixer_mode() {
+            category_text = format!("{}{}{}", "← ", category_text, " →");
+        }
+        let category_line = Line::styled(
+            " Category: ".to_string() + &category_text,
+            HEADER_STYLE.fg(if self.get_category().is_some() {
+                YELLOW
+            } else {
+                LIGHT_COLOR
+            }),
+        )
+        .left_aligned();
 
-        // Iterate through all elements in the `items` and stylize them.
+
+        //==Sounds
         let items: Vec<ListItem> = self
-            .get_list()
-            .items()
+            .get_sound_manager()
+            .get_sound_list()
             .iter()
+            //Filter for selected category
+            .filter(|s| {
+                if let Some(c) = self.get_category() {
+                    s.category() == self.get_sound_manager().categories()[c]
+                } else {
+                    true
+                }
+            })
             .enumerate()
-            .map(|(i, todo_item)| {
+            //Generate ListItem for each sound
+            .map(|(i, s)| {
                 let color = alternate_colors(i);
-                let displayed_name = todo_item.name.clone();
-                let mut item = ListItem::from(displayed_name).bg(color);
-                if todo_item.done {
-                    item = item.add_modifier(Modifier::CROSSED_OUT);
-                }
-                else if todo_item.priority>5 {
-                    item = item.add_modifier(Modifier::BOLD).fg(AMBER.c100);
-                }
-                item
+                let playing = self.get_sound_manager().is_sound_playing(s.path());
+                let paused = self.get_sound_manager().is_sound_paused(s.path());
+
+                //Display category if no filter
+                let category_format = match self.get_category() {
+                    None => format!("[{}] {}", s.category().to_uppercase(), s.name()),
+                    _ => s.name().to_string()
+                };
+
+                //Add playing/paused symbol
+                let displayed_name = match (playing, paused) {
+                    (_, true) => format!("{} 𝄽", category_format),
+                    (true, _) => format!("{} ♪", category_format),
+                    _ => category_format,
+                };
+
+                //Create ListItem
+                ListItem::from(displayed_name)
+                .bg(color)
+                .fg(match playing{
+                    true => YELLOW,
+                    false => LIGHT_COLOR
+                })
             })
             .collect();
 
-        let mut selected_style = SELECTED_STYLE;
-        let mut symbol = " => ";
-        if self.is_edit_mode() {
-            symbol = "===>";
-            selected_style=EDIT_STYLE;//.add_modifier(Modifier::REVERSED);
+        //Design block
+        let block = Block::new()
+            .title(Line::raw("Sounds List").centered())
+            .borders(Borders::ALL)
+            .border_set(BORDER_STYLE_NONE)
+            .border_style(HEADER_STYLE)
+            .bg(ALT_ROW_BG_COLOR);
+
+        //Split area for category and list
+        let [cat_layout, list_layout] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block.inner(area));
+
+
+        //Design selected item
+        let selected_playing = self.get_sound_selected_path()
+        .map_or(false, |path| self.get_sound_manager().is_sound_playing(&path));
+
+        let selected_style = match (self.get_mixer_mode(), selected_playing) {
+            (true, _) => SELECTED_STYLE.fg(FOCUS_UNSELECTED_COLOR),
+            (_, true) => SELECTED_STYLE.add_modifier(Modifier::BOLD),
+            _ => SELECTED_STYLE,
         };
 
+        //Render block, list, and category
         let list = List::new(items)
-            .block(block)
             .highlight_style(selected_style)
-            .highlight_symbol(symbol)
+            .highlight_symbol(" =>")
             .highlight_spacing(HighlightSpacing::Always);
 
-        StatefulWidget::render(list, area, buf, &mut self.get_state());
+        block.render(area, buf);
+        Paragraph::new(category_line).render(cat_layout, buf);
+        StatefulWidget::render(list, list_layout, buf, &mut self.get_sound_list_state());
     }
 
-    //Renders selected task (right)
-    fn render_selected_item(&self, area: Rect, buf: &mut Buffer) {
-        let mut text: Vec<Line<'_>> = vec![];
-        let border_style = if self.is_edit_mode() { EDIT_STYLE } else { TODO_HEADER_STYLE };
 
-        match &self.get_selected() {
-            Some(i) => {
-                let task = self.get_list().task(*i);
-                let style = if self.is_edit_mode() { EDIT_VALUE_STYLE } else { TEXT_STYLE };
+    /// Renders the scene collection tab
+    fn render_scene_collection_tab(&mut self, area: Rect, buf: &mut Buffer) {
+        //==Scenes
+        let items: Vec<ListItem> = self
+            .get_sound_manager()
+            .get_scene_collection()
+            .iter()
+            .enumerate()
+            //Generate ListItem for each sound
+            .map(|(i, s)| {
+                let name = s.name.to_string();
+                let is_playing = i==self.get_sound_manager().get_current_scene_index();
 
-                let mut name_line = vec!["Name : ".red()];
+                //Create ListItem
+                ListItem::from(name)
+                .bg(alternate_colors(i))
+                .fg(match is_playing{
+                    true => YELLOW,
+                    false => LIGHT_COLOR
+                })
+            })
+            .collect();
 
-                let mut priority_line = vec!["Priority : ".red()];
-
-                let state_line = vec![
-                    "Done : ".red(),
-                    Span::styled(format!("{}", task.done), TEXT_STYLE),
-                ];
-
-                if self.is_edit_mode() {
-                    name_line.push(Span::styled(self.get_edit_name(), style));
-                    priority_line.push(Span::styled(format!("{}", self.get_edit_priority()), style));
-                    name_line.push("_".fg(EDIT_VALUE_COLOR).add_modifier(Modifier::BOLD));
-                    priority_line.push(" (-/+)".fg(EDIT_VALUE_COLOR).bold());
-                } else {
-                    name_line.push(Span::styled(&task.name, style));
-                    priority_line.push(Span::styled(format!("{}", task.priority), TEXT_STYLE));
-                }
-
-                text.push(Line::from(name_line));
-                text.push(Line::from(priority_line));
-                text.push(Line::from(state_line));
-            }
-            None => {
-                text.push(Line::styled("Select a task", Style::new().gray().italic()));
-            }
-        }
-
-        // We show the list item's info under the list in this paragraph
+        //Design block
         let block = Block::new()
-            .title(Line::raw("Task Information").centered())
-            .borders(Borders::all())
-            .border_set(symbols::border::EMPTY)
-            .border_style(border_style)
-            .bg(NORMAL_ROW_BG)
-            .padding(Padding::horizontal(1));
+            .title(Line::raw("Scene List").centered())
+            .borders(Borders::ALL)
+            .border_set(BORDER_STYLE_NONE)
+            .border_style(HEADER_STYLE)
+            .bg(ALT_ROW_BG_COLOR);
 
-        // We can now render the item info
-        Paragraph::new(text)
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .render(area, buf);
-    }*/
+        //Design selected item
+        let selected_playing = self.get_scene_selected_index()
+        .map_or(false, |index| self.get_sound_manager().get_current_scene_index() == index);
+
+        let selected_style = match (self.get_mixer_mode(), selected_playing) {
+            (true, _) => SELECTED_STYLE.fg(FOCUS_UNSELECTED_COLOR),
+            (_, true) => SELECTED_STYLE.add_modifier(Modifier::BOLD),
+            _ => SELECTED_STYLE,
+        };
+
+        //Render block, list, and category
+        let list = List::new(items)
+            .highlight_style(selected_style)
+            .highlight_symbol(" =>")
+            .highlight_spacing(HighlightSpacing::Always)
+            .block(block);
+        StatefulWidget::render(list, area, buf, &mut self.get_scene_list_state());
+    }
+
+
+    //Renders right list
+    fn render_current_sounds(&self, area: Rect, buf: &mut Buffer) {
+        let border_style = if !self.get_mixer_mode() {
+            BORDER_STYLE_NONE
+        } else {
+            BORDER_STYLE_SELECTED
+        };
+
+        let block = Block::new()
+            .title(Line::styled("Mixer", HEADER_STYLE).centered())
+            .borders(Borders::ALL)
+            .border_set(border_style)
+            .border_style(HEADER_STYLE)
+            .bg(NORMAL_ROW_BG);
+
+        let sounds = self.get_sound_manager().playing_sounds();
+        let mut constr: Vec<Constraint> = vec![];
+        for _i in 0..sounds.len() {
+            constr.push(Constraint::Length(1));
+            constr.push(Constraint::Length(1));
+            constr.push(Constraint::Length(1));
+        }
+        constr.push(Constraint::Fill(1));
+
+        let layouts = Layout::vertical(constr).split(block.inner(area));
+
+        block.render(area, buf);
+
+        sounds.iter().enumerate().for_each(|(i, (p, _))| {
+            let path = p.as_str();
+            if !self.get_sound_manager().is_sound_playing(path) {
+                return;
+            }
+
+            let volume = match self.get_sound_manager().get_sound_by_path(path) {
+                Some(sound) => sound.volume(),
+                None => 0.0,
+            };
+
+            let selected = match self.get_mixer_index() {
+                Some(index) => index == i,
+                None => false,
+            };
+
+            let mut color = if selected { FOCUS_COLOR } else { LIGHT_COLOR };
+            let mut gauge_style = if selected {
+                GAUGE_STYLE.fg(FOCUS_COLOR)
+            } else {
+                GAUGE_STYLE
+            };
+            if !self.get_mixer_mode() && selected {
+                color = FOCUS_UNSELECTED_COLOR;
+                gauge_style = gauge_style.fg(FOCUS_UNSELECTED_COLOR);
+            }
+            if self.get_sound_manager().is_paused() {
+                gauge_style = GAUGE_STYLE.fg(PAUSED_COLOR);
+            }
+
+            Paragraph::new(path)
+                .wrap(Wrap { trim: false })
+                .fg(color)
+                .render(layouts[3 * i], buf);
+
+            Gauge::default()
+                .gauge_style(gauge_style)
+                .ratio(volume.into())
+                .render(layouts[3 * i + 1], buf);
+        });
+    }
 }
 
 //Renders whole app
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let footer_length = if true {3} else {2};
+        let footer_length = if true { 3 } else { 2 };
         let [header_area, main_area, footer_area] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Fill(1),
@@ -164,12 +349,18 @@ impl Widget for &mut App {
         ])
         .areas(area);
 
-        let info_weight = if true {2} else {1};
-        let [list_area, item_area] =
-            Layout::horizontal([Constraint::Fill(3-info_weight), Constraint::Fill(info_weight)]).areas(main_area);
+        let [list_area, mixer_area] =
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(main_area);
 
-        App::render_header(header_area, buf);
+        self.render_header(header_area, buf);
         self.render_footer(footer_area, buf);
+        let inner_tab_area = self.render_sound_scene_tabs(list_area, buf);
+        self.render_current_sounds(mixer_area, buf);
+        if self.get_sound_list_tab() {
+            self.render_sound_collection_tab(inner_tab_area, buf);
+        } else {
+            self.render_scene_collection_tab(inner_tab_area, buf);
+        }
     }
 }
 
