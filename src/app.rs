@@ -19,6 +19,7 @@ pub struct App {
     scene_state: ListState,
     //Mixer
     mixer_index: Option<usize>,
+    mixer_scroll: u8,
     mixer_mode: bool,
 }
 
@@ -42,6 +43,7 @@ impl App {
             category: None,
             mixer_index: None,
             mixer_mode: false,
+            mixer_scroll:0,
             sound_list_tab: true
         };
         app.scene_state.select(Some(app.sound_manager.get_current_scene_index()));

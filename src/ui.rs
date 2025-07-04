@@ -2,7 +2,7 @@
 use crate::App;
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
+    layout::{self, Constraint, Layout, Rect},
     style::{
         palette::tailwind::{AMBER, TEAL},
         Color, Modifier, Style, Stylize,
@@ -14,7 +14,8 @@ use ratatui::{
         Widget, Wrap,
     },
 };
-use std::sync::Arc;
+use std::{fmt::format, sync::Arc};
+use cli_log::*;
 
 const LIGHT_COLOR: Color = TEAL.c100;
 const FOCUS_COLOR: Color = AMBER.c300;
@@ -267,14 +268,14 @@ impl App {
     }
 
 
-    //Renders right list
-    fn render_current_sounds(&self, area: Rect, buf: &mut Buffer) {
+    //Renders the mixer (right panel)
+    fn render_mixer(&self, area: Rect, buf: &mut Buffer) {
         let border_style = if !self.get_mixer_mode() {
             BORDER_STYLE_NONE
         } else {
             BORDER_STYLE_SELECTED
         };
-
+        
         let block = Block::new()
             .title(Line::styled("Mixer", HEADER_STYLE).centered())
             .borders(Borders::ALL)
@@ -283,23 +284,36 @@ impl App {
             .bg(NORMAL_ROW_BG);
 
         let sounds = self.get_sound_manager().playing_sounds();
+        let max_visible_lines = block.inner(area).height;
+        let max_visible_sounds = max_visible_lines/3;
+        info!("========================");
+        info!("max lines {}, max display {}",max_visible_lines,max_visible_sounds);
+        //Each sounds needs 3 lines to be displayed (name, volume bar, space)
         let mut constr: Vec<Constraint> = vec![];
         for _i in 0..sounds.len() {
+            if (constr.len()+3)>max_visible_lines.into() {break;}
             constr.push(Constraint::Length(1));
             constr.push(Constraint::Length(1));
             constr.push(Constraint::Length(1));
         }
-        constr.push(Constraint::Fill(1));
+        //constr.push(Constraint::Fill(1));
 
         let layouts = Layout::vertical(constr).split(block.inner(area));
 
         block.render(area, buf);
+
+
 
         sounds.iter().enumerate().for_each(|(i, (p, _))| {
             let path = p.as_str();
             if !self.get_sound_manager().is_sound_playing(path) {
                 return;
             }
+            if i>=max_visible_sounds.into() {
+                return;
+            }
+            info!("sound {}",i);
+            
 
             let volume = match self.get_sound_manager().get_sound_by_path(path) {
                 Some(sound) => sound.volume(),
@@ -355,7 +369,7 @@ impl Widget for &mut App {
         self.render_header(header_area, buf);
         self.render_footer(footer_area, buf);
         let inner_tab_area = self.render_sound_scene_tabs(list_area, buf);
-        self.render_current_sounds(mixer_area, buf);
+        self.render_mixer(mixer_area, buf);
         if self.get_sound_list_tab() {
             self.render_sound_collection_tab(inner_tab_area, buf);
         } else {
